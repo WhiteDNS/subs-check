@@ -12,7 +12,7 @@ import (
 	"github.com/metacubex/mihomo/dns"
 )
 
-// defaultBootstrapNameservers 是 default-nameserver 留空时的兜底，必须是纯 IP。
+// defaultBootstrapNameservers is the fallback when default-nameserver is empty; entries must be plain IPs.
 var defaultBootstrapNameservers = []string{
 	"223.5.5.5",
 	"119.29.29.29",
@@ -33,7 +33,7 @@ func initResolver() error {
 	resolver.DisableIPv6 = !c.IPv6
 
 	if !c.Enable {
-		slog.Info("DNS resolver 使用 mihomo 默认", "ipv6", c.IPv6)
+		slog.Info("DNS resolver uses mihomo defaults", "ipv6", c.IPv6)
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func initResolver() error {
 	resolver.DefaultResolver = rs.Resolver
 	resolver.ProxyServerHostResolver = rs.ProxyResolver
 
-	slog.Info("DNS resolver 已初始化",
+	slog.Info("DNS resolver initialized",
 		"nameserver", len(main),
 		"proxy-server", len(proxySrv),
 		"default", len(def),
@@ -97,7 +97,7 @@ func parseNameservers(servers []string, fieldName string) ([]dns.NameServer, err
 		}
 		u, err := url.Parse(s)
 		if err != nil {
-			slog.Warn(fieldName+" 跳过无效项", "value", raw, "reason", err)
+			slog.Warn(fieldName+" skipped invalid item", "value", raw, "reason", err)
 			continue
 		}
 		ns := dns.NameServer{}
@@ -122,13 +122,13 @@ func parseNameservers(servers []string, fieldName string) ([]dns.NameServer, err
 			ns.Net = "quic"
 			ns.Addr = hostPort(u.Host, "853")
 		default:
-			slog.Warn(fieldName+" 跳过不支持的 scheme", "value", raw, "scheme", u.Scheme)
+			slog.Warn(fieldName+" skipped unsupported scheme", "value", raw, "scheme", u.Scheme)
 			continue
 		}
 		out = append(out, ns)
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%s 全部无效，至少需要一个有效项", fieldName)
+		return nil, fmt.Errorf("%s has no valid entries; at least one valid entry is required", fieldName)
 	}
 	return out, nil
 }
@@ -148,13 +148,13 @@ func validateBootstrapIPs(servers []string) ([]string, error) {
 		// Bare bracketed IPv6 like "[::1]" without port.
 		host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
 		if net.ParseIP(host) == nil {
-			slog.Warn("default-nameserver 跳过无效 IP", "value", ns)
+			slog.Warn("default-nameserver skipped invalid IP", "value", ns)
 			continue
 		}
 		valid = append(valid, ns)
 	}
 	if len(valid) == 0 {
-		return nil, fmt.Errorf("default-nameserver 全部无效，至少需要一个有效 IP")
+		return nil, fmt.Errorf("default-nameserver has no valid entries; at least one valid IP is required")
 	}
 	return valid, nil
 }

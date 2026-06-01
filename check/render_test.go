@@ -8,8 +8,9 @@ import (
 	proxyutils "github.com/beck-8/subs-check/proxy"
 )
 
-// withConfig 临时替换 config.GlobalConfig 的内容,测试结束后还原。
-// GlobalConfig 是 *Config 指针,这里通过指针解引用赋值,保证持有同一指针的代码照常工作。
+// withConfig temporarily replaces config.GlobalConfig and restores it after the test.
+// GlobalConfig is a *Config pointer, so assigning through the pointer keeps code
+// holding the same pointer working as expected.
 func withConfig(t *testing.T, cfg config.Config, fn func()) {
 	t.Helper()
 	old := *config.GlobalConfig
@@ -24,10 +25,10 @@ func TestRenderName_RenameOff_NoTags(t *testing.T) {
 		Platforms:  []string{"openai", "netflix"},
 	}, func() {
 		r := Result{
-			Proxy: map[string]any{"name": "🇭🇰香港01"},
+			Proxy: map[string]any{"name": "🇭🇰Hong Kong 01"},
 		}
 		got := RenderName(r, false)
-		want := "🇭🇰香港01"
+		want := "🇭🇰Hong Kong 01"
 		if got != want {
 			t.Errorf("RenderName() = %q, want %q", got, want)
 		}
@@ -35,16 +36,16 @@ func TestRenderName_RenameOff_NoTags(t *testing.T) {
 }
 
 func TestRenderName_RenameOff_PreservesOriginalWithPipes(t *testing.T) {
-	// 机场原名里就带 | 的情况,不能破坏它
+	// Preserve original provider names that already contain |.
 	withConfig(t, config.Config{
 		RenameNode: false,
 		Platforms:  []string{},
 	}, func() {
 		r := Result{
-			Proxy: map[string]any{"name": "🇺🇸美国01-0.1倍 | 电信联通移动推荐"},
+			Proxy: map[string]any{"name": "🇺🇸United States 01-0.1x | carrier recommended"},
 		}
 		got := RenderName(r, false)
-		want := "🇺🇸美国01-0.1倍 | 电信联通移动推荐"
+		want := "🇺🇸United States 01-0.1x | carrier recommended"
 		if got != want {
 			t.Errorf("RenderName() = %q, want %q", got, want)
 		}
@@ -57,13 +58,13 @@ func TestRenderName_RenameOff_WithMediaTags(t *testing.T) {
 		Platforms:  []string{"openai", "netflix", "disney"},
 	}, func() {
 		r := Result{
-			Proxy:   map[string]any{"name": "🇭🇰香港01"},
+			Proxy:   map[string]any{"name": "🇭🇰Hong Kong 01"},
 			Openai:  &platform.OpenAIResult{Full: true, Region: "HK"},
 			Netflix: &platform.NetflixResult{Full: true, Region: "HK"},
 			Disney:  true,
 		}
 		got := RenderName(r, false)
-		want := "🇭🇰香港01|GPT⁺-HK|NF-HK|D+"
+		want := "🇭🇰Hong Kong 01|GPT⁺-HK|NF-HK|D+"
 		if got != want {
 			t.Errorf("RenderName() = %q, want %q", got, want)
 		}
@@ -71,10 +72,10 @@ func TestRenderName_RenameOff_WithMediaTags(t *testing.T) {
 }
 
 func TestRenderName_PlatformsOrderMatters(t *testing.T) {
-	// 标签顺序严格遵循 config.Platforms
+	// Tag order strictly follows config.Platforms.
 	withConfig(t, config.Config{
 		RenameNode: false,
-		Platforms:  []string{"netflix", "openai"}, // 与上一个测试顺序相反
+		Platforms:  []string{"netflix", "openai"}, // Opposite order from the previous test.
 	}, func() {
 		r := Result{
 			Proxy:   map[string]any{"name": "n"},
@@ -117,7 +118,7 @@ func TestRenderName_IncludeSpeedFalse_NoSpeedTag(t *testing.T) {
 			Proxy: map[string]any{"name": "n"},
 			Speed: 5120,
 		}
-		got := RenderName(r, false) // filter 阶段调用时传 false
+		got := RenderName(r, false) // The filter stage passes false.
 		want := "n"
 		if got != want {
 			t.Errorf("RenderName() = %q, want %q", got, want)
@@ -133,7 +134,7 @@ func TestRenderName_SpeedTagFormat_KB(t *testing.T) {
 	}, func() {
 		r := Result{
 			Proxy: map[string]any{"name": "n"},
-			Speed: 512, // < 1024,展示 KB/s
+			Speed: 512, // < 1024, display KB/s.
 		}
 		got := RenderName(r, true)
 		want := "n|512KB/s"
@@ -144,7 +145,7 @@ func TestRenderName_SpeedTagFormat_KB(t *testing.T) {
 }
 
 func TestRenderName_SpeedZero_NoSpeedTag(t *testing.T) {
-	// Speed=0 表示未测速(ForceClose 场景),即使 includeSpeed=true 也不加标签
+	// Speed=0 means untested (ForceClose scenario), so no tag is added even when includeSpeed=true.
 	withConfig(t, config.Config{
 		RenameNode:   false,
 		SpeedTestUrl: "https://example.com/file",
@@ -163,7 +164,7 @@ func TestRenderName_SpeedZero_NoSpeedTag(t *testing.T) {
 }
 
 func TestRenderName_SpeedBeforeMediaTags(t *testing.T) {
-	// 锁定标签顺序: base | speed | media-tags | sub_tag
+	// Lock tag order: base | speed | media-tags | sub_tag.
 	withConfig(t, config.Config{
 		RenameNode:   false,
 		SpeedTestUrl: "https://example.com/file",
@@ -242,8 +243,10 @@ func TestRenderName_RenameOnWithCountry(t *testing.T) {
 }
 
 func TestRenderName_RenameOnButEmptyCountry_UsesOtherFallback(t *testing.T) {
-	// 重命名开启但 Country 为空(Phase 2 查询失败),应走 ❓Other 兜底
-	// 而不是回退到原名,否则上游带 |speed|media 尾缀的脏名会透传进来再被叠加。
+	// When renaming is enabled but Country is empty because Phase 2 lookup
+	// failed, use the ❓Other fallback instead of preserving the original name.
+	// Otherwise upstream names polluted with |speed|media suffixes leak through
+	// and get appended again.
 	proxyutils.ResetRenameCounter()
 	withConfig(t, config.Config{
 		RenameNode: true,
@@ -251,11 +254,11 @@ func TestRenderName_RenameOnButEmptyCountry_UsesOtherFallback(t *testing.T) {
 		Platforms:  []string{},
 	}, func() {
 		r := Result{
-			Proxy:   map[string]any{"name": "🇹🇼原名|745KB/s|YT-TW"},
+			Proxy:   map[string]any{"name": "🇹🇼original-name|745KB/s|YT-TW"},
 			Country: "",
 		}
 		got := RenderName(r, false)
-		if got == "🇹🇼原名|745KB/s|YT-TW" {
+		if got == "🇹🇼original-name|745KB/s|YT-TW" {
 			t.Errorf("RenderName() should not preserve polluted original name when RenameNode=true, got %q", got)
 		}
 		if len(got) < len("PREFIX-") || got[:len("PREFIX-")] != "PREFIX-" {
@@ -267,7 +270,89 @@ func TestRenderName_RenameOnButEmptyCountry_UsesOtherFallback(t *testing.T) {
 	})
 }
 
-// 辅助函数
+func TestRenderName_NodeNameTemplateWithSpeed(t *testing.T) {
+	proxyutils.ResetRenameCounter()
+	withConfig(t, config.Config{
+		NodeNameTemplate: "{CountryFlag} | @WhiteDNS | {Speed}",
+		SpeedTestUrl:     "https://example.com/file",
+		Platforms:        []string{},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "original"},
+			Country: "US",
+			Speed:   2048, // 2.0 MB/s
+		}
+		got := RenderName(r, true)
+		want := "🇺🇸 | @WhiteDNS | 2.0MB/s"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestRenderName_NodeNameTemplateKeepsTagsPlaceholderExplicit(t *testing.T) {
+	proxyutils.ResetRenameCounter()
+	withConfig(t, config.Config{
+		NodeNameTemplate: "{CountryFlag} | {Name} | {Tags}",
+		SpeedTestUrl:     "https://example.com/file",
+		Platforms:        []string{"netflix"},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "original", "sub_tag": "source"},
+			Country: "JP",
+			Speed:   1024,
+			Netflix: &platform.NetflixResult{Full: true, Region: "JP"},
+		}
+		got := RenderName(r, true)
+		want := "🇯🇵 | original | 1.0MB/s|NF-JP|source"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestRenderName_NodeNameTemplateFlagAndShortID(t *testing.T) {
+	proxyutils.ResetRenameCounter()
+	withConfig(t, config.Config{
+		NodeNameTemplate: "{Flag}|@WhiteDNS|{ShortID}",
+		Platforms:        []string{},
+	}, func() {
+		first := Result{
+			Proxy:   map[string]any{"name": "first"},
+			Country: "DE",
+		}
+		second := Result{
+			Proxy:   map[string]any{"name": "second"},
+			Country: "DE",
+		}
+		if got, want := RenderName(first, true), "🇩🇪|@WhiteDNS|DE1"; got != want {
+			t.Errorf("first RenderName() = %q, want %q", got, want)
+		}
+		if got, want := RenderName(second, true), "🇩🇪|@WhiteDNS|DE2"; got != want {
+			t.Errorf("second RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestRenderName_NodeNameTemplateActualNameAlias(t *testing.T) {
+	proxyutils.ResetRenameCounter()
+	withConfig(t, config.Config{
+		NodeNameTemplate: "{CountryFlag}|{ActualName}|@WhiteDNS|{ShortID}",
+		Platforms:        []string{},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "provider-node-1"},
+			Country: "US",
+		}
+		got := RenderName(r, true)
+		want := "🇺🇸|provider-node-1|@WhiteDNS|US1"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
+// Helper.
 func stringContains(s, substr string) bool {
 	for i := 0; i+len(substr) <= len(s); i++ {
 		if s[i:i+len(substr)] == substr {

@@ -10,10 +10,10 @@ import (
 
 func main() {
 	application := app.New(fmt.Sprintf("%s-%s", Version, CurrentCommit))
-	slog.Info(fmt.Sprintf("当前版本: %s-%s", Version, CurrentCommit))
+	slog.Info(fmt.Sprintf("Current version: %s-%s", Version, CurrentCommit))
 
 	if err := application.Initialize(); err != nil {
-		slog.Error(fmt.Sprintf("初始化失败: %v", err))
+		slog.Error(fmt.Sprintf("Initialization failed: %v", err))
 		os.Exit(1)
 	}
 

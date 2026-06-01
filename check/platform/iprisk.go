@@ -21,7 +21,7 @@ func CheckIPRisk(httpClient *http.Client, ip string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		// 读取响应内容
+		// Read the response body.
 		buf := getPooledBuf()
 		defer putPooledBuf(buf)
 		if _, err := buf.ReadFrom(resp.Body); err != nil {
@@ -31,22 +31,22 @@ func CheckIPRisk(httpClient *http.Client, ip string) (string, error) {
 		marker := []byte("IP Fraud Risk API")
 		apiIndex := bytes.Index(body, marker)
 		if apiIndex == -1 {
-			return "", fmt.Errorf("未找到IP Fraud Risk API")
+			return "", fmt.Errorf("IP Fraud Risk API not found")
 		}
-		// 从 "IP Fraud Risk API" 后的内容开始
+		// Start from the content after "IP Fraud Risk API".
 		contentAfterAPI := body[apiIndex+len(marker):]
-		// 按行分割
+		// Split by line.
 		lines := bytes.Split(contentAfterAPI, []byte("\n"))
 
 		if len(lines) < 7 {
-			return "", fmt.Errorf("IP Fraud Risk API响应格式不正确")
+			return "", fmt.Errorf("invalid IP Fraud Risk API response format")
 		}
 		var score, rist []byte
 		{
 			score = bytes.TrimSpace(lines[4])
 			tmp := bytes.Split(score, []byte(":"))
 			if len(tmp) < 2 {
-				return "", fmt.Errorf("IP Fraud Risk API响应格式不正确")
+				return "", fmt.Errorf("invalid IP Fraud Risk API response format")
 			}
 			score = bytes.ReplaceAll(tmp[1], []byte(`"`), nil)
 			score = bytes.ReplaceAll(score, []byte(","), nil)
@@ -54,7 +54,7 @@ func CheckIPRisk(httpClient *http.Client, ip string) (string, error) {
 			rist = bytes.TrimSpace(lines[5])
 			tmp = bytes.Split(rist, []byte(":"))
 			if len(tmp) < 2 {
-				return "", fmt.Errorf("IP Fraud Risk API响应格式不正确")
+				return "", fmt.Errorf("invalid IP Fraud Risk API response format")
 			}
 			rist = bytes.ReplaceAll(tmp[1], []byte(`"`), nil)
 			rist = bytes.ReplaceAll(rist, []byte(","), nil)

@@ -8,3 +8,4 @@ Dockerfile
 .idea
 .vscode 
 test
+.cache

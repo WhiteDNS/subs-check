@@ -13,40 +13,42 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// SaveFunc 定义保存方法的函数签名
+// SaveFunc defines the save method function signature.
 type SaveFunc func(data []byte, filename string) error
 
-// SaveConfig 保存检查结果到本地，并可选保存到远程存储。
+// SaveConfig saves check results locally and optionally to remote storage.
 //
-// 执行顺序很关键:
-//   1. 先把 results 序列化保存到 history(此时 proxy["name"] 仍是原始名,
-//      history 文件天然干净,keep-days 下次加载时不会累积标签)
-//   2. 然后原地 mutate 每个 result.Proxy["name"] 为最终展示名
-//      (调 check.RenderName 生成 base + 媒体标签 + 速度标签 + sub_tag)
-//   3. 最后用 mutate 过的 results 序列化成 all.yaml、mihomo.yaml、base64.txt
-//      并写本地 / 远程 / SubStore
+// Order matters:
+//  1. Serialize results to history first while proxy["name"] is still original,
+//     so history stays clean and keep-days does not accumulate tags on reload.
+//  2. Mutate each result.Proxy["name"] in place to the final display name from
+//     check.RenderName: base + media tags + speed tag + sub_tag.
+//  3. Serialize the mutated results to all.yaml, mihomo.yaml, and base64.txt,
+//     then write them locally, remotely, and to SubStore.
 //
-// 隐式契约: SaveConfig 调用后 results 视为已消费,调用方不应再读
-// results[i].Proxy["name"](那已经是展示名,不是原始名)。
+// Implicit contract: after SaveConfig returns, results are considered consumed.
+// Callers should not read results[i].Proxy["name"], because it is now the display
+// name rather than the original name.
 func SaveConfig(results []check.Result) {
-	// 0 节点是常见的合理结果(如全部超时或全部被 filter 过滤),
-	// 此时所有下游序列化都会失败,统一在入口短路并以 Warn 记录,避免多余的 Error 日志
+	// Zero nodes is a common valid result, such as all timeouts or all nodes
+	// being filtered out. Downstream serialization would fail, so short-circuit
+	// here and log once as a warning.
 	if len(results) == 0 {
-		slog.Warn("本轮没有可保存的节点，跳过保存")
+		slog.Warn("No nodes to save in this run; skipping save")
 		return
 	}
 
-	// ① 先写 history,此时 proxy["name"] 仍是原始值,history yaml 天然干净
+	// 1. Write history first while proxy["name"] still has the original value.
 	if config.GlobalConfig.KeepDays > 0 {
 		historyYamlData, err := marshalProxies(results)
 		if err != nil {
-			slog.Error(fmt.Sprintf("序列化历史快照失败: %v", err))
+			slog.Error(fmt.Sprintf("Failed to serialize history snapshot: %v", err))
 		} else {
 			SaveHistory(historyYamlData)
 		}
 	}
 
-	// ② 原地 mutate:把每个 proxy 的 name 改成最终展示名
+	// 2. Mutate each proxy name in place to the final display name.
 	for i := range results {
 		if results[i].Proxy == nil {
 			continue
@@ -54,19 +56,19 @@ func SaveConfig(results []check.Result) {
 		results[i].Proxy["name"] = check.RenderName(results[i], true)
 	}
 
-	// ③ 用 mutate 过的 results 序列化,给 all.yaml / 远程 / SubStore 复用
+	// 3. Serialize mutated results for all.yaml, remote storage, and SubStore.
 	allYamlData, err := marshalProxies(results)
 	if err != nil {
-		slog.Error(fmt.Sprintf("序列化代理数据失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to serialize proxy data: %v", err))
 		return
 	}
 
-	// 保存 all.yaml 到本地
+	// Save all.yaml locally.
 	if err := method.SaveToLocal(allYamlData, "all.yaml"); err != nil {
-		slog.Error(fmt.Sprintf("保存all.yaml到本地失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to save all.yaml locally: %v", err))
 	}
 
-	// 更新 SubStore 并获取衍生文件(mihomo.yaml / base64.txt)
+	// Update SubStore and fetch derived files (mihomo.yaml / base64.txt).
 	var mihomoData, base64Data []byte
 	if config.GlobalConfig.SubStorePort != "" {
 		utils.UpdateSubStore(allYamlData)
@@ -80,17 +82,17 @@ func SaveConfig(results []check.Result) {
 		)
 	}
 
-	// 保存衍生文件到本地
+	// Save derived files locally.
 	saveIfNotEmpty(method.SaveToLocal, mihomoData, "mihomo.yaml")
 	saveIfNotEmpty(method.SaveToLocal, base64Data, "base64.txt")
 
-	// 保存所有文件到远程(如果配置了远程保存方式)
+	// Save all files remotely if a remote save method is configured.
 	if config.GlobalConfig.SaveMethod == "local" {
 		return
 	}
 	remoteSaver, err := newRemoteSaver()
 	if err != nil {
-		slog.Error(fmt.Sprintf("初始化远程保存方法(%s)失败: %v", config.GlobalConfig.SaveMethod, err))
+		slog.Error(fmt.Sprintf("Failed to initialize remote save method (%s): %v", config.GlobalConfig.SaveMethod, err))
 		return
 	}
 	saveIfNotEmpty(remoteSaver, allYamlData, "all.yaml")
@@ -98,73 +100,73 @@ func SaveConfig(results []check.Result) {
 	saveIfNotEmpty(remoteSaver, base64Data, "base64.txt")
 }
 
-// marshalProxies 从检查结果中提取代理并序列化为 YAML
+// marshalProxies extracts proxies from check results and serializes them as YAML.
 func marshalProxies(results []check.Result) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(results))
 	for _, result := range results {
 		proxies = append(proxies, result.Proxy)
 	}
 	if len(proxies) == 0 {
-		return nil, fmt.Errorf("没有可用的代理节点")
+		return nil, fmt.Errorf("no usable proxy nodes")
 	}
 	return yaml.Marshal(map[string]any{"proxies": proxies})
 }
 
-// fetchSubStoreData 从 SubStore API 获取数据
+// fetchSubStoreData fetches data from the SubStore API.
 func fetchSubStoreData(url, name string) []byte {
 	resp, err := http.Get(url)
 	if err != nil {
-		slog.Error(fmt.Sprintf("获取%s请求失败: %v", name, err))
+		slog.Error(fmt.Sprintf("Failed to request %s: %v", name, err))
 		return nil
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Error(fmt.Sprintf("读取%s失败: %v", name, err))
+		slog.Error(fmt.Sprintf("Failed to read %s: %v", name, err))
 		return nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		slog.Error(fmt.Sprintf("获取%s失败, 状态码: %d, 错误信息: %s", name, resp.StatusCode, body))
+		slog.Error(fmt.Sprintf("Failed to get %s, status code: %d, error: %s", name, resp.StatusCode, body))
 		return nil
 	}
 	return body
 }
 
-// saveIfNotEmpty 当数据非空时执行保存
+// saveIfNotEmpty saves data when it is not empty.
 func saveIfNotEmpty(saver SaveFunc, data []byte, filename string) {
 	if len(data) == 0 {
 		return
 	}
 	if err := saver(data, filename); err != nil {
-		slog.Error(fmt.Sprintf("保存%s到%s失败: %v", filename, config.GlobalConfig.SaveMethod, err))
+		slog.Error(fmt.Sprintf("Failed to save %s to %s: %v", filename, config.GlobalConfig.SaveMethod, err))
 	}
 }
 
-// newRemoteSaver 根据配置创建远程保存方法
+// newRemoteSaver creates a remote save method from config.
 func newRemoteSaver() (SaveFunc, error) {
 	switch config.GlobalConfig.SaveMethod {
 	case "r2":
 		if err := method.ValiR2Config(); err != nil {
-			return nil, fmt.Errorf("R2配置不完整: %w", err)
+			return nil, fmt.Errorf("R2 configuration is incomplete: %w", err)
 		}
 		return method.UploadToR2Storage, nil
 	case "gist":
 		if err := method.ValiGistConfig(); err != nil {
-			return nil, fmt.Errorf("Gist配置不完整: %w", err)
+			return nil, fmt.Errorf("Gist configuration is incomplete: %w", err)
 		}
 		return method.UploadToGist, nil
 	case "webdav":
 		if err := method.ValiWebDAVConfig(); err != nil {
-			return nil, fmt.Errorf("WebDAV配置不完整: %w", err)
+			return nil, fmt.Errorf("WebDAV configuration is incomplete: %w", err)
 		}
 		return method.UploadToWebDAV, nil
 	case "s3":
 		if err := method.ValiS3Config(); err != nil {
-			return nil, fmt.Errorf("S3配置不完整: %w", err)
+			return nil, fmt.Errorf("S3 configuration is incomplete: %w", err)
 		}
 		return method.UploadToS3, nil
 	default:
-		return nil, fmt.Errorf("未知的保存方法: %s", config.GlobalConfig.SaveMethod)
+		return nil, fmt.Errorf("unknown save method: %s", config.GlobalConfig.SaveMethod)
 	}
 }

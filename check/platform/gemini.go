@@ -10,13 +10,13 @@ import (
 
 var geminiRe = regexp.MustCompile(`,2,1,200,"([A-Z]{3})"`)
 
-// Gemini 封禁地区列表（三字码）
+// Gemini blocked region list (alpha-3 codes).
 var geminiBlockedCodes = map[string]bool{
 	"CHN": true, "RUS": true, "BLR": true, "CUB": true,
 	"IRN": true, "PRK": true, "SYR": true, "HKG": true, "MAC": true,
 }
 
-// alpha3ToAlpha2 使用 countries 库将三字码转换为二字码
+// alpha3ToAlpha2 converts an alpha-3 code to alpha-2 using the countries library.
 func alpha3ToAlpha2(alpha3 string) string {
 	code := strings.ToUpper(alpha3)
 	country := countries.ByName(code)
@@ -26,8 +26,8 @@ func alpha3ToAlpha2(alpha3 string) string {
 	return country.Alpha2()
 }
 
-// CheckGemini 检测 Google Gemini 解锁状态
-// 返回地区二字码（如 "US"），空字符串表示不可用
+// CheckGemini checks Google Gemini unlock status.
+// Returns an alpha-2 region code such as "US"; an empty string means unavailable.
 func CheckGemini(httpClient *http.Client) (string, error) {
 	req, err := http.NewRequest("GET", "https://gemini.google.com/", nil)
 	if err != nil {
@@ -47,7 +47,7 @@ func CheckGemini(httpClient *http.Client) (string, error) {
 	}
 	body := buf.Bytes()
 
-	// 提取三字母国家码
+	// Extract the alpha-3 country code.
 	matches := geminiRe.FindSubmatch(body)
 	if len(matches) <= 1 {
 		return "", nil
@@ -55,7 +55,7 @@ func CheckGemini(httpClient *http.Client) (string, error) {
 
 	alpha3Code := string(matches[1])
 
-	// 检查是否在封禁列表中
+	// Check whether it is in the blocked list.
 	if geminiBlockedCodes[alpha3Code] {
 		return "", nil
 	}

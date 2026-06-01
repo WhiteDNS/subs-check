@@ -19,7 +19,7 @@ const (
 	historyTimeFormat = "2006-01-02_1504"
 )
 
-// SaveHistory 保存本次检测的节点快照，如 history/all_2026-04-07_1430.yaml
+// SaveHistory saves a node snapshot for this check, such as history/all_2026-04-07_1430.yaml.
 func SaveHistory(yamlData []byte) {
 	dir := getHistoryDir()
 	if dir == "" {
@@ -30,13 +30,13 @@ func SaveHistory(yamlData []byte) {
 	filename := fmt.Sprintf("%s%s.yaml", historyPrefix, time.Now().Format(historyTimeFormat))
 	path := filepath.Join(dir, filename)
 	if err := os.WriteFile(path, yamlData, 0644); err != nil {
-		slog.Error(fmt.Sprintf("保存历史快照失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to save history snapshot: %v", err))
 		return
 	}
-	slog.Info(fmt.Sprintf("保存历史快照: %s", filename))
+	slog.Info(fmt.Sprintf("Saved history snapshot: %s", filename))
 }
 
-// LoadHistoryProxies 加载最近 N 天的历史节点，并清理过期文件
+// LoadHistoryProxies loads history nodes from the last N days and removes expired files.
 func LoadHistoryProxies() []map[string]any {
 	dir := getHistoryDir()
 	if dir == "" {
@@ -58,7 +58,7 @@ func LoadHistoryProxies() []map[string]any {
 		}
 		if t.Before(cutoff) {
 			os.Remove(f)
-			slog.Debug(fmt.Sprintf("清理过期历史文件: %s", filepath.Base(f)))
+			slog.Debug(fmt.Sprintf("Removed expired history file: %s", filepath.Base(f)))
 			continue
 		}
 		proxies := loadProxiesFromYaml(f)
@@ -68,7 +68,7 @@ func LoadHistoryProxies() []map[string]any {
 	return allProxies
 }
 
-// parseTimeFromFilename 从文件名解析时间
+// parseTimeFromFilename parses time from a filename.
 // all_2026-04-07_1430.yaml -> 2026-04-07 14:30
 func parseTimeFromFilename(name string) (time.Time, bool) {
 	name = strings.TrimPrefix(name, historyPrefix)
@@ -80,14 +80,14 @@ func parseTimeFromFilename(name string) (time.Time, bool) {
 func loadProxiesFromYaml(path string) []map[string]any {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("读取历史文件失败: %s, %v", filepath.Base(path), err))
+		slog.Warn(fmt.Sprintf("Failed to read history file: %s, %v", filepath.Base(path), err))
 		return nil
 	}
 	var doc struct {
 		Proxies []map[string]any `yaml:"proxies"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		slog.Warn(fmt.Sprintf("解析历史文件失败: %s, %v", filepath.Base(path), err))
+		slog.Warn(fmt.Sprintf("Failed to parse history file: %s, %v", filepath.Base(path), err))
 		return nil
 	}
 	return doc.Proxies

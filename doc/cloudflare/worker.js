@@ -42,13 +42,13 @@ const routeHandlers = {
                 }
             });
         } catch (error) {
-            return handleError('GitHub API 请求失败: ' + error.message);
+            return handleError('GitHub API request failed: ' + error.message);
         }
     },
 
     async gist(request, url, env) {
         if (!await validateToken(url, env)) {
-            return handleError('未授权访问', 401);
+            return handleError('Unauthorized access', 401);
         }
 
         try {
@@ -58,51 +58,51 @@ const routeHandlers = {
             const gistContent = await fetch(gistUrl).then(res => res.text());
             return createResponse(gistContent, 200, 'text/plain');
         } catch (error) {
-            return handleError('获取 Gist 内容失败: ' + error.message);
+            return handleError('Failed to get Gist content: ' + error.message);
         }
     },
 
     async storage(request, url, env) {
         if (!await validateToken(url, env)) {
-            return handleError('未授权访问', 401);
+            return handleError('Unauthorized access', 401);
         }
 
         if (request.method === 'GET') {
             const filename = url.searchParams.get('filename');
             if (!filename) {
-                return handleError('请提供文件名', 400);
+                return handleError('Please provide a filename', 400);
             }
 
             try {
                 const object = await env.SUB_BUCKET.get(filename);
                 if (object === null) {
-                    return handleError('未找到该键对应的值', 404);
+                    return handleError('No value found for this key', 404);
                 }
                 return createResponse(await object.text(), 200, 'text/plain');
             } catch (error) {
-                return handleError('读取数据失败: ' + error.message);
+                return handleError('Failed to read data: ' + error.message);
             }
         } else if (request.method === 'POST') {
             try {
                 const { filename, value } = await request.json();
                 if (!filename || !value) {
-                    return handleError('请提供文件名和值', 400);
+                    return handleError('Please provide a filename and value', 400);
                 }
 
                 await env.SUB_BUCKET.put(filename, value);
-                return createResponse({ code: 200, message: '数据写入成功' });
+                return createResponse({ code: 200, message: 'Data written successfully' });
             } catch (error) {
-                return handleError('数据写入失败: ' + error.message);
+                return handleError('Failed to write data: ' + error.message);
             }
         }
 
-        return handleError('不支持的请求方法', 405);
+        return handleError('Unsupported request method', 405);
     },
     async speedtest(request, url, env) {
         try {
             const bytes = url.searchParams.get('bytes');
             if (!bytes) {
-                return handleError('请提供测试大小(bytes)', 400);
+                return handleError('Please provide the test size in bytes', 400);
             }
 
             const speedTestUrl = `https://speed.cloudflare.com/__down?bytes=${bytes}`;
@@ -121,35 +121,35 @@ const routeHandlers = {
                 }
             });
         } catch (error) {
-            return handleError('测速失败: ' + error.message);
+            return handleError('Speed test failed: ' + error.message);
         }
     },
     async raw(request, url) {
         try {
-            // 从 pathname 中提取 /raw 后的部分
+            // Extract the part after /raw from pathname.
             const inputPath = url.pathname.replace('/raw', '');
             if (!inputPath || inputPath == '/') {
-                return handleError('请提供 GitHub 相关路径', 400);
+                return handleError('Please provide a GitHub-related path', 400);
             }
     
             let targetUrl;
-            // 判断是否包含域名部分
+            // Check whether the path includes a domain.
             if (inputPath.includes('raw.githubusercontent.com')) {
-                // 提取 raw.githubusercontent.com 后的路径
+                // Extract the path after raw.githubusercontent.com.
                 const rawIndex = inputPath.indexOf('raw.githubusercontent.com');
                 const githubPath = inputPath.substring(rawIndex + 'raw.githubusercontent.com'.length);
                 targetUrl = `https://raw.githubusercontent.com${githubPath}`;
             } else if (inputPath.includes('github.com')) {
-                // 提取 github.com 后的路径（release 或 archive）
+                // Extract the path after github.com (release or archive).
                 const githubIndex = inputPath.indexOf('github.com');
                 const githubPath = inputPath.substring(githubIndex + 'github.com'.length);
                 if (githubPath.includes('/releases/download/') || githubPath.includes('/archive/')) {
                     targetUrl = `https://github.com${githubPath}`;
                 } else {
-                    return handleError('仅支持 raw 文件、release 或 archive 路径', 400);
+                    return handleError('Only raw file, release, or archive paths are supported', 400);
                 }
             } else {
-                // 不含域名，假设是 raw 文件路径或 release/archive 路径
+                // No domain: assume this is a raw file path or a release/archive path.
                 const path = inputPath.startsWith('/') ? inputPath : `/${inputPath}`;
                 if (path.includes('/releases/download/') || path.includes('/archive/')) {
                     targetUrl = `https://github.com${path}`;
@@ -158,18 +158,18 @@ const routeHandlers = {
                 }
             }
     
-            // 设置请求头
+            // Set request headers.
             const headers = new Headers(request.headers);
             headers.set('User-Agent', 'Cloudflare-Worker');
     
-            // 通过 Cloudflare 代理下载
+            // Download through the Cloudflare proxy.
             const response = await fetch(targetUrl, {
                 method: 'GET',
                 headers
             });
     
             if (!response.ok) {
-                return handleError('GitHub 下载失败', response.status);
+                return handleError('GitHub download failed', response.status);
             }
     
             const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
@@ -183,7 +183,7 @@ const routeHandlers = {
                 }
             });
         } catch (error) {
-            return handleError('GitHub 代理失败: ' + error.message);
+            return handleError('GitHub proxy failed: ' + error.message);
         }
     }
 };
@@ -210,7 +210,7 @@ async function handleMirrorRequest(request, url) {
             headers: responseHeaders
         });
     } catch (error) {
-        return handleError('镜像请求失败: ' + error.message);
+        return handleError('Mirror request failed: ' + error.message);
     }
 }
 
@@ -236,7 +236,7 @@ export default {
 
             return await handleMirrorRequest(request, url);
         } catch (error) {
-            return handleError('服务器错误: ' + error.message);
+            return handleError('Server error: ' + error.message);
         }
     }
 };

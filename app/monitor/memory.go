@@ -12,14 +12,14 @@ import (
 	human "github.com/docker/go-units"
 )
 
-// StartMemoryMonitor 启动内存监控
+// StartMemoryMonitor starts memory monitoring.
 func StartMemoryMonitor() {
-	// mihomo的内存问题解决不了，所以加个内存限制自动重启
-	// 解决了，暂时保留逻辑
+	// Keep this restart guard for memory pressure even though the original mihomo
+	// memory issue has been resolved.
 	if limit := os.Getenv("SUB_CHECK_MEM_LIMIT"); limit != "" {
 		memoryLimit, err := human.FromHumanSize(limit)
 		if err != nil {
-			slog.Error("内存限制参数错误", "error", err)
+			slog.Error("Invalid memory limit parameter", "error", err)
 			return
 		}
 
@@ -35,7 +35,7 @@ func StartMemoryMonitor() {
 		}()
 	}
 
-	// 添加内存使用情况监控
+	// Add memory usage monitoring.
 	if strings.ToLower(os.Getenv("SUB_CHECK_MEM_MONITOR")) != "" {
 		go func() {
 			var m runtime.MemStats
@@ -44,7 +44,7 @@ func StartMemoryMonitor() {
 
 			for range ticker.C {
 				runtime.ReadMemStats(&m)
-				slog.Info("内存使用情况",
+				slog.Info("Memory usage",
 					"Alloc", formatBytes(m.Alloc),
 					"TotalAlloc", formatBytes(m.TotalAlloc),
 					"Sys", formatBytes(m.Sys),
@@ -75,7 +75,7 @@ func StartMemoryMonitor() {
 	}
 }
 
-// checkMemory 检查内存使用情况
+// checkMemory checks memory usage.
 func checkMemory(memoryLimit uint64) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -84,39 +84,39 @@ func checkMemory(memoryLimit uint64) {
 		metadata := m.Sys - m.HeapSys - m.StackSys
 		heapFrag := m.HeapInuse - m.HeapAlloc
 		approxRSS := m.HeapAlloc + m.StackInuse + metadata + heapFrag
-		slog.Warn("内存超过使用限制",
+		slog.Warn("Memory usage exceeded the limit",
 			"rss", human.HumanSize(float64(approxRSS)),
 			"metadata", human.HumanSize(float64(metadata)),
 			"heapFrag", human.HumanSize(float64(heapFrag)),
 			"limit", human.HumanSize(float64(memoryLimit)))
 
-		// 重新启动自己
+		// Restart this process.
 		cmd := getSelfCommand()
 		if cmd != nil {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
-			cmd.Start() // 让新进程启动
-			slog.Warn("因为内存问题启动了新进程，二进制用户如果需要关闭请关闭此窗口/终端")
+			cmd.Start() // Let the new process start.
+			slog.Warn("Started a new process due to memory pressure; binary users can close this window/terminal to stop it")
 		}
 
-		// 退出当前进程
+		// Exit the current process.
 		os.Exit(1)
 	}
 }
 
-// getSelfCommand 获取当前程序路径和参数
+// getSelfCommand returns the current program path and arguments.
 func getSelfCommand() *exec.Cmd {
 	exePath, err := os.Executable()
 	if err != nil {
-		slog.Error("获取可执行文件路径失败:", "error", err)
+		slog.Error("Failed to get executable path:", "error", err)
 		return nil
 	}
-	args := os.Args[1:] // 获取参数（不包括程序名）
-	slog.Warn("🔄 进程即将重启...", "path", exePath, "args", args)
+	args := os.Args[1:] // Get arguments excluding the program name.
+	slog.Warn("🔄 Process is about to restart...", "path", exePath, "args", args)
 	return exec.Command(exePath, args...)
 }
 
-// formatBytes 将字节数格式化为人类可读的形式
+// formatBytes formats bytes into a human-readable string.
 func formatBytes(bytes uint64) string {
 	const unit = 1024
 	if bytes < unit {

@@ -8,17 +8,17 @@ import (
 
 var openaiRe = regexp.MustCompile(`loc=([A-Z]{2})`)
 
-// OpenAIResult 表示 OpenAI 检测结果
+// OpenAIResult represents an OpenAI check result.
 type OpenAIResult struct {
-	Full   bool   // 客户端可用（cookies+client双通过）
-	Web    bool   // 仅Web端可用（单项通过）
-	Region string // 地区码
+	Full   bool   // Client available (cookies + client both passed).
+	Web    bool   // Web only (one check passed).
+	Region string // Region code.
 }
 
-// CheckOpenAI 检测 ChatGPT 解锁状态
-// 1. cookies+client 双通过 → GPT⁺-US
-// 2. 仅单项通过 → GPT-US
-// 3. 都不通过 → 无标签
+// CheckOpenAI checks ChatGPT unlock status.
+// 1. cookies + client both pass -> GPT⁺-US.
+// 2. only one check passes -> GPT-US.
+// 3. neither passes -> no tag.
 func CheckOpenAI(httpClient *http.Client) *OpenAIResult {
 	result := &OpenAIResult{}
 
@@ -37,7 +37,7 @@ func CheckOpenAI(httpClient *http.Client) *OpenAIResult {
 	return result
 }
 
-// getOpenAIRegion 通过 Cloudflare cdn-cgi/trace 提取地区码
+// getOpenAIRegion extracts the region code through Cloudflare cdn-cgi/trace.
 func getOpenAIRegion(httpClient *http.Client) string {
 	req, err := http.NewRequest("GET", "https://chat.openai.com/cdn-cgi/trace", nil)
 	if err != nil {
@@ -65,7 +65,7 @@ func getOpenAIRegion(httpClient *http.Client) string {
 	return ""
 }
 
-// checkCookies 通过检查cookies判断网络访问
+// checkCookies checks network access through cookies.
 func checkCookies(httpClient *http.Client) bool {
 	req, err := http.NewRequest("GET", "https://api.openai.com/compliance/cookie_requirements", nil)
 	if err != nil {
@@ -88,7 +88,7 @@ func checkCookies(httpClient *http.Client) bool {
 	return !bytes.Contains(bytes.ToLower(body), []byte("unsupported_country"))
 }
 
-// checkClient 通过模拟客户端访问检查app可用性
+// checkClient checks app availability by simulating client access.
 func checkClient(httpClient *http.Client) bool {
 	req, err := http.NewRequest("GET", "https://ios.chat.openai.com", nil)
 	if err != nil {

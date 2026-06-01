@@ -8,38 +8,38 @@ import (
 
 var netflixRe = regexp.MustCompile(`/([a-z]{2})/title/`)
 
-// NetflixResult 表示 Netflix 检测结果
+// NetflixResult represents a Netflix check result.
 type NetflixResult struct {
-	Full          bool   // 全解锁
-	OriginalsOnly bool   // 仅自制剧
-	Region        string // 地区码
+	Full          bool   // Full unlock.
+	OriginalsOnly bool   // Netflix Originals only.
+	Region        string // Region code.
 }
 
-// CheckNetflix 检测 Netflix 解锁状态
-// 1. 全解锁: 非自制剧title返回200/301，提取地区码 → NF-US
-// 2. 仅自制剧: 非自制剧title返回404，自制剧title返回200 → NF
-// 3. 封禁: 全部403 → 无标签
+// CheckNetflix checks Netflix unlock status.
+// 1. Full unlock: a non-original title returns 200/301 and the region is extracted -> NF-US.
+// 2. Originals only: a non-original title returns 404 and an original title returns 200 -> NF.
+// 3. Blocked: all requests return 403 -> no tag.
 func CheckNetflix(httpClient *http.Client) (*NetflixResult, error) {
 	result := &NetflixResult{}
 
-	// title 81280792 是非自制剧（地区限制内��）
-	// title 70143836 是自制剧（Netflix Originals）
+	// Title 81280792 is a non-original title with regional availability.
+	// Title 70143836 is a Netflix Original.
 	nonOriginalStatus := checkNetflixTitle(httpClient, "81280792")
 	originalStatus := checkNetflixTitle(httpClient, "70143836")
 
 	if nonOriginalStatus == 200 || nonOriginalStatus == 301 {
-		// 非自制剧可访问 → 全解锁
+		// Non-original title is accessible -> full unlock.
 		result.Full = true
 		result.Region = getNetflixRegion(httpClient)
 	} else if nonOriginalStatus == 404 && (originalStatus == 200 || originalStatus == 301) {
-		// 非自制剧404但自制剧可访问 → 仅自制剧
+		// Non-original title is 404 but original title is accessible -> Originals only.
 		result.OriginalsOnly = true
 	}
 
 	return result, nil
 }
 
-// checkNetflixTitle 检测指定 Netflix title 的 HTTP 状态码
+// checkNetflixTitle checks the HTTP status code for a specific Netflix title.
 func checkNetflixTitle(httpClient *http.Client, titleID string) int {
 	req, err := http.NewRequest("GET", "https://www.netflix.com/title/"+titleID, nil)
 	if err != nil {
@@ -56,7 +56,7 @@ func checkNetflixTitle(httpClient *http.Client, titleID string) int {
 	return resp.StatusCode
 }
 
-// getNetflixRegion 通过访问特定title提取地区码
+// getNetflixRegion extracts the region code by visiting a specific title.
 func getNetflixRegion(httpClient *http.Client) string {
 	req, err := http.NewRequest("GET", "https://www.netflix.com/title/80018499", nil)
 	if err != nil {
@@ -64,7 +64,7 @@ func getNetflixRegion(httpClient *http.Client) string {
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
-	// 不跟随重定向，从 Location 头提取地区码
+	// Do not follow redirects; extract the region code from the Location header.
 	client := *httpClient
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -81,7 +81,7 @@ func getNetflixRegion(httpClient *http.Client) string {
 		return ""
 	}
 
-	// Location 格式如: https://www.netflix.com/xx/title/80018499
+	// Location format example: https://www.netflix.com/xx/title/80018499.
 	matches := netflixRe.FindStringSubmatch(location)
 	if len(matches) > 1 {
 		return strings.ToUpper(matches[1])

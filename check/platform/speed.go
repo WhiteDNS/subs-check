@@ -14,7 +14,7 @@ import (
 	"github.com/metacubex/mihomo/common/convert"
 )
 
-// networkLimitedReader 基于网络层字节计数器的大小限制 reader
+// networkLimitedReader limits reads using the network-layer byte counter.
 type networkLimitedReader struct {
 	reader       io.Reader
 	bytesCounter *uint64
@@ -31,7 +31,7 @@ func (r *networkLimitedReader) Read(p []byte) (n int, err error) {
 			return 0, io.EOF
 		}
 
-		// 限制本次读取的大小（粗略控制，因为网络层可能读取更多）
+		// Limit this read size. This is approximate because the network layer may read more.
 		if remaining := r.limit - networkRead; remaining < uint64(len(p)) {
 			p = p[:remaining]
 		}
@@ -44,15 +44,17 @@ func (r *networkLimitedReader) Read(p []byte) (n int, err error) {
 // config.GlobalConfig) so a run captured at pipeline start stays consistent
 // even if the user edits SpeedTestUrl mid-check.
 func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter *uint64, speedTestURL string) (int, int64, error) {
-	// 注意：速度限制在网络层（statsConn）实现，大小限制在应用层基于网络字节计数器实现
-	// - 速度限制：通过 bucket 在 statsConn 中实现（网络层）
-	// - 大小限制：通过 networkLimitedReader 基于网络字节计数器实现（应用层，但限制网络流量）
+	// Note: speed limiting is implemented at the network layer (statsConn), while
+	// size limiting is implemented at the application layer using the network byte counter.
+	// - speed limit: implemented through bucket in statsConn (network layer)
+	// - size limit: implemented through networkLimitedReader using the network byte counter
+	//   (application layer, but still limits network traffic)
 
-	// 创建一个新的测速专用客户端，基于原有客户端的传输层
+	// Create a new speed-test client using the original client's transport layer.
 	speedClient := &http.Client{
-		// 设置更长的超时时间用于测速
+		// Use a longer timeout for speed testing.
 		Timeout: time.Duration(config.GlobalConfig.DownloadTimeout) * time.Second,
-		// 保持原有的传输层配置
+		// Preserve the original transport configuration.
 		Transport: httpClient.Transport,
 	}
 
@@ -62,7 +64,7 @@ func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter 
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
 
-	// 记录测速前的网络传输字节数
+	// Record transferred network bytes before the speed test.
 	var startBytes uint64
 	if bytesCounter != nil {
 		startBytes = *bytesCounter
@@ -71,20 +73,20 @@ func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter 
 
 	resp, err := speedClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("测速请求失败: %v", err))
+		slog.Debug(fmt.Sprintf("Speed-test request failed: %v", err))
 		return 0, 0, err
 	}
 	defer resp.Body.Close()
 
-	// 计算网络层的大小限制
+	// Calculate the network-layer size limit.
 	var limitSize uint64
 	if config.GlobalConfig.DownloadMB > 0 {
 		limitSize = uint64(config.GlobalConfig.DownloadMB) * 1024 * 1024
 	} else {
-		limitSize = 0 // 不限制
+		limitSize = 0 // Unlimited.
 	}
 
-	// 使用 networkLimitedReader 包装响应体，基于网络字节计数器限制大小
+	// Wrap the response body with networkLimitedReader to limit size by the network byte counter.
 	limitedReader := &networkLimitedReader{
 		reader:       resp.Body,
 		bytesCounter: bytesCounter,
@@ -92,30 +94,30 @@ func CheckSpeed(httpClient *http.Client, bucket *ratelimit.Bucket, bytesCounter 
 		limit:        limitSize,
 	}
 
-	// 读取所有数据
+	// Read all data.
 	totalBytes, err := io.Copy(io.Discard, limitedReader)
-	// io.EOF 是正常的（达到限制），其他错误才需要关注
+	// io.EOF is expected when the limit is reached; only other errors matter.
 	if err != nil && err != io.EOF && totalBytes == 0 {
-		slog.Debug(fmt.Sprintf("totalBytes: %d, 读取数据时发生错误: %v", totalBytes, err))
+		slog.Debug(fmt.Sprintf("totalBytes: %d, error while reading data: %v", totalBytes, err))
 		return 0, 0, err
 	}
 
-	// 计算下载时间（毫秒）
+	// Calculate download time in milliseconds.
 	duration := time.Since(startTime).Milliseconds()
 	if duration == 0 {
-		duration = 1 // 避免除以零
+		duration = 1 // Avoid division by zero.
 	}
 
-	// 计算实际网络传输的字节数（压缩数据）
+	// Calculate actual network bytes transferred (compressed data).
 	var actualBytes int64
 	if bytesCounter != nil {
 		actualBytes = int64(*bytesCounter - startBytes)
 	} else {
-		// 如果没有字节计数器，无法获取准确数据
+		// Without a byte counter, accurate data is unavailable.
 		actualBytes = 0
 	}
 
-	// 计算速度（KB/s），使用实际网络传输的字节数
+	// Calculate speed (KB/s) using actual transferred network bytes.
 	speed := int(float64(actualBytes) / 1024 * 1000 / float64(duration))
 
 	return speed, actualBytes, nil

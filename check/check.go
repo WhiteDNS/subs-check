@@ -23,7 +23,7 @@ import (
 	"github.com/metacubex/mihomo/constant"
 )
 
-// Result 存储节点检测结果
+// Result stores a node check result.
 type Result struct {
 	Proxy      map[string]any
 	Openai     *platform.OpenAIResult
@@ -39,15 +39,15 @@ type Result struct {
 	IP         string
 	IPRisk     string
 	Country    string
-	Speed      int // KB/s, 0 表示未测速或测速未通过
+	Speed      int // KB/s, 0 means untested or failed the speed test.
 }
 
-// aliveResult 存活检测通过的中间结果
+// aliveResult is the intermediate result after the alive check passes.
 type aliveResult struct {
 	Proxy map[string]any
 }
 
-// ProxyChecker 处理代理检测的主要结构体
+// ProxyChecker handles proxy checks.
 // Per-stage counts live on package-level atomics (Progress / Available /
 // MediaDone / FilterPassed / SpeedDone / SpeedOk) so both the CLI progress
 // UI and the web admin API can read them without plumbing through a pointer.
@@ -75,14 +75,14 @@ var (
 	SpeedOk      atomic.Uint32 // checkSpeed passes (also equals collector input when hasSpeedTest)
 )
 
-// PhaseResult 保存单个阶段的最终结果
+// PhaseResult stores the final result for one stage.
 type PhaseResult struct {
 	Available uint32 `json:"available"`
 	Total     uint32 `json:"total"`
 }
 
-// PhaseResults 保存各阶段最终结果，供前端展示历史数据
-var PhaseResults [4]atomic.Pointer[PhaseResult] // index 1-3 对应三个阶段
+// PhaseResults stores final results for each stage for the frontend history view.
+var PhaseResults [4]atomic.Pointer[PhaseResult] // indexes 1-3 map to the three stages.
 
 func SavePhaseResult(phase int, available, total uint32) {
 	if phase >= 1 && phase <= 3 {
@@ -147,7 +147,7 @@ func installPhaseCancel(cancel context.CancelFunc) func() {
 
 var Bucket *ratelimit.Bucket
 
-// effectiveConcurrency 计算阶段实际并发数
+// effectiveConcurrency calculates the effective concurrency for a stage.
 func effectiveConcurrency(phaseConcurrency, fallback, itemCount int) int {
 	c := phaseConcurrency
 	if c <= 0 {
@@ -162,7 +162,7 @@ func effectiveConcurrency(phaseConcurrency, fallback, itemCount int) int {
 	return c
 }
 
-// Check 执行代理检测的主函数
+// Check runs the proxy check pipeline.
 func Check() ([]Result, error) {
 	proxyutils.ResetRenameCounter()
 
@@ -173,24 +173,24 @@ func Check() ([]Result, error) {
 
 	TotalBytes.Store(0)
 
-	// keep-days 历史节点前置
+	// Prepend keep-days history nodes.
 	var proxies []map[string]any
 	if len(config.GlobalProxies) > 0 {
-		slog.Info(fmt.Sprintf("添加历史待测节点，数量: %d", len(config.GlobalProxies)))
+		slog.Info(fmt.Sprintf("Added history nodes to the check queue: %d", len(config.GlobalProxies)))
 		proxies = append(proxies, config.GlobalProxies...)
 	}
 	tmp, err := proxyutils.GetProxies()
 	if err != nil {
-		return nil, fmt.Errorf("获取节点失败: %w", err)
+		return nil, fmt.Errorf("failed to get nodes: %w", err)
 	}
 	proxies = append(proxies, tmp...)
-	slog.Info(fmt.Sprintf("获取节点数量: %d", len(proxies)))
+	slog.Info(fmt.Sprintf("Fetched nodes: %d", len(proxies)))
 
-	// 重置全局节点
+	// Reset global nodes.
 	config.GlobalProxies = make([]map[string]any, 0)
 
 	proxies = proxyutils.DeduplicateProxies(proxies)
-	slog.Info(fmt.Sprintf("去重后节点数量: %d", len(proxies)))
+	slog.Info(fmt.Sprintf("Nodes after deduplication: %d", len(proxies)))
 
 	checker := &ProxyChecker{
 		results: make([]Result, 0),
@@ -209,8 +209,8 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		Bucket = ratelimit.NewBucketWithRate(float64(math.MaxInt64), int64(math.MaxInt64))
 	}
 
-	slog.Info("开始检测节点")
-	slog.Info("当前参数", "timeout", config.GlobalConfig.Timeout, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
+	slog.Info("Starting node checks")
+	slog.Info("Current parameters", "timeout", config.GlobalConfig.Timeout, "enable-speedtest", config.GlobalConfig.SpeedTestUrl != "", "min-speed", config.GlobalConfig.MinSpeed, "download-timeout", config.GlobalConfig.DownloadTimeout, "download-mb", config.GlobalConfig.DownloadMB, "total-speed-limit", config.GlobalConfig.TotalSpeedLimit)
 
 	ResetPhaseResults()
 
@@ -230,7 +230,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	aliveConcurrency := effectiveConcurrency(config.GlobalConfig.Concurrent, config.GlobalConfig.Concurrent, total)
 	mediaConcurrency := effectiveConcurrency(config.GlobalConfig.MediaConcurrent, config.GlobalConfig.Concurrent, total)
 	speedConcurrency := effectiveConcurrency(config.GlobalConfig.SpeedConcurrent, config.GlobalConfig.Concurrent, total)
-	slog.Info(fmt.Sprintf("启动流水线: 输入=%d, 并发(测活/媒体/测速)=%d/%d/%d", total, aliveConcurrency, mediaConcurrency, speedConcurrency))
+	slog.Info(fmt.Sprintf("Starting pipeline: input=%d, concurrency(alive/media/speed)=%d/%d/%d", total, aliveConcurrency, mediaConcurrency, speedConcurrency))
 
 	// showProgress keeps reading pc.progress / pc.available / pc.proxyCount;
 	// the alive stage owns these counters throughout the pipeline run.
@@ -241,7 +241,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	// Compile filter patterns once; media workers re-use the slice.
 	patterns := CompileFilterPatterns()
 	if len(patterns) > 0 {
-		slog.Info(fmt.Sprintf("应用节点过滤规则，共 %d 个正则表达式", len(patterns)))
+		slog.Info(fmt.Sprintf("Applying node filters: %d regexes", len(patterns)))
 	}
 
 	// Whole-pipeline cancellation: collector pulls the trigger on SuccessLimit,
@@ -256,7 +256,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	collectIn := make(chan pipelineItem, speedConcurrency)
 
 	if config.GlobalConfig.ShuffleTestOrder {
-		slog.Info("已打乱节点测试顺序，输出仍保持订阅原序")
+		slog.Info("Shuffled node check order; output still preserves subscription order")
 	}
 
 	// Dispatcher
@@ -303,13 +303,13 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	pauseProgress()
 
 	if limitHit {
-		slog.Warn(fmt.Sprintf("达到成功数量限制: %d，已停止流水线", config.GlobalConfig.SuccessLimit))
+		slog.Warn(fmt.Sprintf("Success limit reached: %d; pipeline stopped", config.GlobalConfig.SuccessLimit))
 	} else if ctx.Err() != nil {
 		// External cancel (RequestCancel via SIGHUP / HTTP force-close).
 		// Logged here rather than in RequestCancel because emitting it
 		// while the progress renderer is still drawing would let the
 		// next frame's cursor-up escape overwrite the warn line.
-		slog.Warn("收到取消信号，已停止流水线")
+		slog.Warn("Cancel signal received; pipeline stopped")
 	}
 
 	// Snapshot per-stage results. Totals cascade: alive counts against input,
@@ -336,14 +336,14 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 	Phase.Store(0)
 
-	slog.Info(fmt.Sprintf("存活节点数量: %d", aliveOk))
+	slog.Info(fmt.Sprintf("Alive nodes: %d", aliveOk))
 	if len(patterns) > 0 {
-		slog.Info(fmt.Sprintf("过滤前节点数量: %d, 过滤后节点数量: %d", mediaDone, filterPassed))
+		slog.Info(fmt.Sprintf("Nodes before filtering: %d, after filtering: %d", mediaDone, filterPassed))
 	} else if hasSpeedTest {
-		slog.Info(fmt.Sprintf("流媒体阶段通过数量: %d", filterPassed))
+		slog.Info(fmt.Sprintf("Media stage passed nodes: %d", filterPassed))
 	}
-	slog.Info(fmt.Sprintf("可用节点数量: %d", len(pc.results)))
-	slog.Info(fmt.Sprintf("测试总消耗流量: %.3fGB", float64(TotalBytes.Load())/1024/1024/1024))
+	slog.Info(fmt.Sprintf("Usable nodes: %d", len(pc.results)))
+	slog.Info(fmt.Sprintf("Total traffic used by tests: %.3fGB", float64(TotalBytes.Load())/1024/1024/1024))
 
 	pc.checkSubscriptionSuccessRate(proxies)
 
@@ -523,7 +523,7 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 	return &wg
 }
 
-// checkAlive 检测单个代理是否存活
+// checkAlive checks whether a single proxy is alive.
 func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 	if os.Getenv("SUB_CHECK_SKIP") != "" {
 		return &aliveResult{Proxy: proxy}
@@ -543,11 +543,12 @@ func (pc *ProxyChecker) checkAlive(proxy map[string]any) *aliveResult {
 	return &aliveResult{Proxy: proxy}
 }
 
-// checkSpeed 对已有的 Result 执行测速。
-// 通过 min-speed 的节点填充 r.Speed 并返回;未通过的返回 nil。
-// 不修改 proxy["name"]。
-// speedTestURL 由调用方在流水线启动时冻结的快照,避免 config 热重载
-// 把 URL 置空后把当前这一轮的所有测速请求打穿(no host error)。
+// checkSpeed runs a speed test on an existing Result.
+// Nodes that pass min-speed get r.Speed set and are returned; failed nodes return nil.
+// proxy["name"] is not modified.
+// speedTestURL is a snapshot frozen by the caller when the pipeline starts, so a
+// config hot reload that clears the URL does not break every speed-test request
+// in the current run with a no-host error.
 func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 	if os.Getenv("SUB_CHECK_SKIP") != "" {
 		r.Speed = 0
@@ -569,8 +570,9 @@ func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 	return &r
 }
 
-// checkMedia 执行流媒体检测和必要的国家查询。
-// 不会丢弃节点,不会修改 proxy["name"];检测结果写入 Result 的结构化字段。
+// checkMedia runs media checks and any required country lookup.
+// It does not discard nodes or modify proxy["name"]; results are written to
+// Result's structured fields.
 // Counter updates are owned by the caller (media pipeline worker).
 func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 	res := &Result{Proxy: a.Proxy}
@@ -595,7 +597,7 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 			Timeout:   time.Duration(mediaTimeout) * time.Second,
 		}
 
-		// 并行检测所有平台
+		// Check all platforms in parallel.
 		var mediaWg sync.WaitGroup
 		for _, plat := range config.GlobalConfig.Platforms {
 			switch plat {
@@ -666,7 +668,7 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 					if err == nil {
 						res.IPRisk = risk
 					} else {
-						slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
+						slog.Debug(fmt.Sprintf("IP risk lookup failed: %v", err))
 					}
 				}()
 			case "tiktok":
@@ -682,8 +684,9 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 		mediaWg.Wait()
 	}
 
-	// 如果没有通过 iprisk 得到 Country，而 RenameNode 开启，则显式查一次国家
-	if res.Country == "" && config.GlobalConfig.RenameNode {
+	// If iprisk did not populate Country but naming needs country data,
+	// explicitly query the country once.
+	if res.Country == "" && (config.GlobalConfig.RenameNode || config.GlobalConfig.NodeNameTemplate != "") {
 		country, _ := proxyutils.GetProxyCountry(httpClient.Client)
 		res.Country = country
 	}
@@ -691,23 +694,23 @@ func (pc *ProxyChecker) checkMedia(a aliveResult) *Result {
 	return res
 }
 
-// pauseProgress 暂停进度条并换行，确保后续日志不会与进度条混在一行
+// pauseProgress pauses progress rendering and writes a newline so later logs do not share the same line.
 func pauseProgress() {
 	progressPaused.Store(true)
-	time.Sleep(150 * time.Millisecond) // 等待进度条goroutine停止输出
+	time.Sleep(150 * time.Millisecond) // Wait for the progress goroutine to stop writing.
 	if progressRendered.Load() {
-		fmt.Println()                 // 仅在进度条实际输出过时才换行
-		progressRendered.Store(false) // 标记换行已收尾,避免后续 done 信号重复换行
+		fmt.Println()                 // Only add a newline if progress was actually rendered.
+		progressRendered.Store(false) // Mark the newline as handled to avoid a duplicate newline on done.
 	}
 }
 
-// resumeProgress 恢复进度条显示
+// resumeProgress resumes progress rendering.
 func resumeProgress() {
 	progressRendered.Store(false)
 	progressPaused.Store(false)
 }
 
-// 辅助方法
+// Helpers.
 func (pc *ProxyChecker) incrementProgress() {
 	atomic.AddInt32(&pc.progress, 1)
 	Progress.Add(1)
@@ -736,15 +739,15 @@ func (pc *ProxyChecker) resetPhaseCounters(count int) {
 	SpeedOk.Store(0)
 }
 
-// checkSubscriptionSuccessRate 检查订阅成功率并发出警告
+// checkSubscriptionSuccessRate checks subscription success rates and logs warnings.
 func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any) {
-	// 统计每个订阅的节点总数和成功数
+	// Count total and successful nodes for each subscription.
 	subStats := make(map[string]struct {
 		total   int
 		success int
 	})
 
-	// 统计所有节点的订阅来源
+	// Count subscription sources for all nodes.
 	for _, proxy := range allProxies {
 		if subUrl, ok := proxy["sub_url"].(string); ok {
 			stats := subStats[subUrl]
@@ -753,7 +756,7 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 		}
 	}
 
-	// 统计成功节点的订阅来源
+	// Count subscription sources for successful nodes.
 	for _, result := range pc.results {
 		if result.Proxy != nil {
 			if subUrl, ok := result.Proxy["sub_url"].(string); ok {
@@ -762,7 +765,7 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 				subStats[subUrl] = stats
 			}
 			delete(result.Proxy, "sub_url")
-			// 可以保持127.0.0.1:8199/sub/all.yaml中的节点tag
+			// Preserve node tags in 127.0.0.1:8199/sub/all.yaml.
 			if subTag, ok := result.Proxy["sub_tag"].(string); ok {
 				if subTag == "" {
 					delete(result.Proxy, "sub_tag")
@@ -771,22 +774,22 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 		}
 	}
 
-	// 检查成功率并发出警告
+	// Check success rates and log warnings.
 	for subUrl, stats := range subStats {
 		if stats.total > 0 {
 			successRate := float32(stats.success) / float32(stats.total)
 
-			// 如果成功率低于x，发出警告
+			// Warn when the success rate is below the configured threshold.
 			if successRate < config.GlobalConfig.SuccessRate {
-				slog.Warn(fmt.Sprintf("订阅成功率过低: %s", subUrl),
-					"总节点数", stats.total,
-					"成功节点数", stats.success,
-					"成功占比", fmt.Sprintf("%.2f%%", successRate*100))
+				slog.Warn(fmt.Sprintf("Subscription success rate is too low: %s", subUrl),
+					"total-nodes", stats.total,
+					"successful-nodes", stats.success,
+					"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
 			} else {
-				slog.Debug(fmt.Sprintf("订阅节点统计: %s", subUrl),
-					"总节点数", stats.total,
-					"成功节点数", stats.success,
-					"成功占比", fmt.Sprintf("%.2f%%", successRate*100))
+				slog.Debug(fmt.Sprintf("Subscription node stats: %s", subUrl),
+					"total-nodes", stats.total,
+					"successful-nodes", stats.success,
+					"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
 			}
 		}
 	}
@@ -800,7 +803,7 @@ type statsConn struct {
 }
 
 func (c *statsConn) Read(b []byte) (n int, err error) {
-	// 速度限制（全局）
+	// Global speed limit.
 	if c.bucket != nil {
 		c.bucket.Wait(int64(len(b)))
 	}
@@ -821,7 +824,7 @@ type ProxyClient struct {
 func CreateClient(mapping map[string]any) *ProxyClient {
 	proxy, err := adapter.ParseProxy(mapping)
 	if err != nil {
-		slog.Debug("创建mihomo Client失败", "proxy", mapping["name"], "err", err)
+		slog.Debug("Failed to create mihomo client", "proxy", mapping["name"], "err", err)
 		return nil
 	}
 
@@ -863,15 +866,15 @@ func CreateClient(mapping map[string]any) *ProxyClient {
 }
 
 // Close closes the proxy client and cleans up resources
-// 防止底层库有一些泄露，所以这里手动关闭
+// Manually close resources to guard against leaks in lower-level libraries.
 func (pc *ProxyClient) Close() {
 	if pc.Client != nil {
 		pc.Client.CloseIdleConnections()
 	}
 
-	// 即使这里不关闭，底层GC的时候也会自动关闭
-	// 这里及时的关闭，方便内存回收
-	// 某些底层传输协议的 Close 可能阻塞，超时后放弃等待交由 GC 回收
+	// Even if not closed here, lower-level GC eventually closes it.
+	// Closing promptly helps memory recovery. Some transports can block on
+	// Close, so give up after the timeout and leave cleanup to GC.
 	if pc.proxy != nil {
 		proxy := pc.proxy
 		done := make(chan struct{})
@@ -882,7 +885,7 @@ func (pc *ProxyClient) Close() {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			slog.Debug(fmt.Sprintf("关闭代理连接超时，交由GC回收: %v", proxy))
+			slog.Debug(fmt.Sprintf("Timed out closing proxy connection; leaving cleanup to GC: %v", proxy))
 		}
 	}
 	pc.Client = nil

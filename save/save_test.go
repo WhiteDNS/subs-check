@@ -24,7 +24,7 @@ func TestMarshalProxies_Normal(t *testing.T) {
 	if len(data) == 0 {
 		t.Fatal("expected non-empty yaml data")
 	}
-	// 检查输出包含 proxies 关键字
+	// Check that output contains the proxies key.
 	if got := string(data); !contains(got, "proxies") {
 		t.Errorf("yaml should contain 'proxies', got:\n%s", got)
 	}
@@ -157,7 +157,7 @@ func TestSaveIfNotEmpty_SaverError(t *testing.T) {
 		return fmt.Errorf("disk full")
 	}
 
-	// 不应 panic，错误只记录日志
+	// Should not panic; errors are only logged.
 	saveIfNotEmpty(saver, []byte("data"), "test.yaml")
 }
 
@@ -169,7 +169,7 @@ func TestNewRemoteSaver_UnknownMethod(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown save method")
 	}
-	if !contains(err.Error(), "未知的保存方法") {
+	if !contains(err.Error(), "unknown save method") {
 		t.Errorf("error should mention unknown method, got: %v", err)
 	}
 }

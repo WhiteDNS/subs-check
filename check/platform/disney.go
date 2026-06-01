@@ -7,7 +7,7 @@ import (
 )
 
 func CheckDisney(httpClient *http.Client) (bool, error) {
-	// 定义常量
+	// Define constants.
 	const (
 		cookie    = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&latitude=0&longitude=0&platform=browser&subject_token=DISNEYASSERTION&subject_token_type=urn%3Abamtech%3Aparams%3Aoauth%3Atoken-type%3Adevice"
 		assertion = `{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}`
@@ -15,7 +15,7 @@ func CheckDisney(httpClient *http.Client) (bool, error) {
 		userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 	)
 
-	// 第一步：获取 assertion token
+	// Step 1: get the assertion token.
 	req, err := http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/devices", strings.NewReader(assertion))
 	if err != nil {
 		return false, err
@@ -38,10 +38,10 @@ func CheckDisney(httpClient *http.Client) (bool, error) {
 
 	assertionToken, ok := assertionResp["assertion"].(string)
 	if !ok {
-		return false, fmt.Errorf("无法获取 assertion token")
+		return false, fmt.Errorf("failed to get assertion token")
 	}
 
-	// 第二步：获取 access token
+	// Step 2: get the access token.
 	tokenData := strings.Replace(cookie, "DISNEYASSERTION", assertionToken, 1)
 	req, err = http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/token", strings.NewReader(tokenData))
 	if err != nil {
@@ -72,7 +72,7 @@ func CheckDisney(httpClient *http.Client) (bool, error) {
 		return false, nil
 	}
 
-	// 第三步：检查区域
+	// Step 3: check the region.
 	gqlQuery := fmt.Sprintf(`{"query":"mutation refreshToken($input: RefreshTokenInput!) {refreshToken(refreshToken: $input) {activeSession {sessionId}}}","variables":{"input":{"refreshToken":"%s"}}}`, refreshToken)
 
 	req, err = http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql", strings.NewReader(gqlQuery))
@@ -94,7 +94,7 @@ func CheckDisney(httpClient *http.Client) (bool, error) {
 		return false, err
 	}
 
-	// 检查区域信息
+	// Check region information.
 	extensions, ok := gqlResp["extensions"].(map[string]interface{})
 	if !ok {
 		return false, nil

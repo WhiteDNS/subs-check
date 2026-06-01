@@ -18,31 +18,31 @@ var CurrentCommit = "unknown"
 var TempLog string
 
 func init() {
-	// 设置依赖库日志级别
+	// Set dependency log levels.
 	if os.Getenv("MIHOMO_DEBUG") != "" {
 		mihomoLog.SetLevel(mihomoLog.DEBUG)
 	} else {
 		mihomoLog.SetLevel(mihomoLog.SILENT)
 	}
 
-	// 获取日志级别
+	// Read the configured log level.
 	logLevel := getLogLevel()
 
-	// 创建两个单独的handler
-	// 1. 终端输出 - 带颜色
+	// Create two separate handlers.
+	// 1. Terminal output with color.
 	consoleHandler := tint.NewHandler(os.Stdout, &tint.Options{
 		Level:      logLevel,
 		TimeFormat: "2006-01-02 15:04:05",
 	})
 
-	// 2. 文件输出 - 不带颜色; 写 app.FileLogger ($TMP/subs-check.log),供 web UI 读取
+	// 2. File output without color; writes app.FileLogger ($TMP/subs-check.log) for the web UI.
 	fileHandler := tint.NewHandler(app.FileLogger, &tint.Options{
 		Level:      logLevel,
 		TimeFormat: "2006-01-02 15:04:05",
-		NoColor:    true, // 禁用颜色
+		NoColor:    true, // Disable color.
 	})
 
-	// 创建一个自定义的Slog处理器，将日志同时发送到两个处理器
+	// Create a custom slog handler that sends records to both handlers.
 	handler := &multiHandler{
 		console: consoleHandler,
 		file:    fileHandler,
@@ -50,21 +50,21 @@ func init() {
 
 	logger := slog.New(handler)
 
-	// 设置为全局日志记录器
+	// Set the global logger.
 	slog.SetDefault(logger)
 
 	fmt.Println("==================== WARNING ====================")
-	fmt.Println("⚠️  重要提示：")
-	fmt.Println("1. 本项目完全开源免费，请勿相信任何收费版本")
-	fmt.Println("2. 本项目仅供学习交流，请勿用于非法用途")
-	fmt.Println("3. 项目地址：https://github.com/beck-8/subs-check")
-	fmt.Println("4. 镜像地址：ghcr.io/beck-8/subs-check:latest")
+	fmt.Println("⚠️  Important notice:")
+	fmt.Println("1. This project is fully open source and free. Do not trust any paid versions.")
+	fmt.Println("2. This project is for learning and communication only. Do not use it for illegal purposes.")
+	fmt.Println("3. Project: https://github.com/beck-8/subs-check")
+	fmt.Println("4. Image: ghcr.io/beck-8/subs-check:latest")
 	fmt.Println("==================================================")
 
 }
 
 func getLogLevel() slog.Level {
-	levelStr := strings.ToLower(os.Getenv("LOG_LEVEL")) // 读取环境变量
+	levelStr := strings.ToLower(os.Getenv("LOG_LEVEL")) // Read the environment variable.
 	switch levelStr {
 	case "debug":
 		return slog.LevelDebug
@@ -75,11 +75,11 @@ func getLogLevel() slog.Level {
 	case "error":
 		return slog.LevelError
 	default:
-		return slog.LevelInfo // 默认 INFO 级别
+		return slog.LevelInfo // Default INFO level.
 	}
 }
 
-// 多输出处理器 - 简化版本
+// multiHandler sends log records to multiple handlers.
 type multiHandler struct {
 	console slog.Handler
 	file    slog.Handler
@@ -90,15 +90,15 @@ func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
-	// 复制记录，避免竞态条件
+	// Clone the record to avoid races.
 	r2 := r.Clone()
 
-	// 终端输出 - 带颜色
+	// Terminal output with color.
 	if err := h.console.Handle(ctx, r); err != nil {
 		return err
 	}
 
-	// 文件输出 - 不带颜色
+	// File output without color.
 	return h.file.Handle(ctx, r2)
 }
 

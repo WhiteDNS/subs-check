@@ -13,16 +13,54 @@ var (
 	counterLock = sync.Mutex{}
 )
 
+type RenameParts struct {
+	CountryFlag string
+	Country     string
+	Index       int
+	ShortID     string
+	Name        string
+}
+
 func Rename(name string) string {
+	return NextRenameParts(name).Name
+}
+
+func NextRenameParts(name string) RenameParts {
 	counterLock.Lock()
 	defer counterLock.Unlock()
 
-	counter[name]++
-	return CountryCodeToFlag(name) + name + "_" + strconv.Itoa(counter[name])
+	country := strings.ToUpper(strings.TrimSpace(name))
+	counterKey := country
+	if counterKey == "" {
+		counterKey = "Other"
+	}
+	flag := countryFlag(country)
+	if flag == "❓" {
+		country = "Other"
+	}
 
+	counter[counterKey]++
+	index := counter[counterKey]
+	shortIDCountry := country
+	if shortIDCountry == "Other" {
+		shortIDCountry = "OT"
+	}
+	shortID := shortIDCountry + strconv.Itoa(index)
+	legacyName := CountryCodeToFlag(name) + strings.TrimSpace(name) + "_" + strconv.Itoa(index)
+	if strings.TrimSpace(name) == "" {
+		legacyName = CountryCodeToFlag(name) + "_" + strconv.Itoa(index)
+	}
+
+	return RenameParts{
+		CountryFlag: flag,
+		Country:     country,
+		Index:       index,
+		ShortID:     shortID,
+		Name:        legacyName,
+	}
 }
 
-// ResetRenameCounter 将所有计数器重置为 0
+// ResetRenameCounter resets all counters to 0.
 func ResetRenameCounter() {
 	counterLock.Lock()
 	defer counterLock.Unlock()
@@ -31,10 +69,18 @@ func ResetRenameCounter() {
 }
 
 func CountryCodeToFlag(countryCode string) string {
+	flag := countryFlag(countryCode)
+	if flag == "❓" {
+		return "❓Other"
+	}
+	return flag
+}
+
+func countryFlag(countryCode string) string {
 	code := strings.ToUpper(countryCode)
 	country := countries.ByName(code)
 	if country == countries.Unknown {
-		return "❓Other"
+		return "❓"
 	}
 	return country.Emoji()
 }

@@ -11,7 +11,7 @@ import (
 func GetExecutablePath() string {
 	ex, err := os.Executable()
 	if err != nil {
-		slog.Error(fmt.Sprintf("获取程序路径失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to get program path: %v", err))
 		return "."
 	}
 	return filepath.Dir(ex)

@@ -109,17 +109,17 @@ func (pc *ProxyChecker) renderFrame() int {
 		// Media is the last stage; its filter-pass count is the final result
 		// so the limit marker also lives on this line.
 		limitHit := limit > 0 && int32(filterPass) >= limit
-		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测活", aliveDone, aliveTotal, "存活", aliveOk, false))
-		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "通过", filterPass, limitHit))
+		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("Alive", aliveDone, aliveTotal, "alive", aliveOk, false))
+		fmt.Printf("\x1b[2K\r%s\n", formatStageLine("Media", mediaDone, aliveOk, "passed", filterPass, limitHit))
 		return 2
 	}
 
 	speedDone := SpeedDone.Load()
 	speedOk := SpeedOk.Load()
 	limitHit := limit > 0 && int32(speedOk) >= limit
-	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测活", aliveDone, aliveTotal, "存活", aliveOk, false))
-	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("媒体", mediaDone, aliveOk, "通过", filterPass, false))
-	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("测速", speedDone, filterPass, "通过", speedOk, limitHit))
+	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("Alive", aliveDone, aliveTotal, "alive", aliveOk, false))
+	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("Media", mediaDone, aliveOk, "passed", filterPass, false))
+	fmt.Printf("\x1b[2K\r%s\n", formatStageLine("Speed", speedDone, filterPass, "passed", speedOk, limitHit))
 	return 3
 }
 
@@ -164,12 +164,12 @@ func (pc *ProxyChecker) formatPipelineOneLine() string {
 	speedOk := SpeedOk.Load()
 
 	if hasSpeed {
-		return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (通过:%d) | 测速 通过:%d",
+		return fmt.Sprintf("Pipeline: alive %d/%d (alive:%d) | media %d/%d (passed:%d) | speed passed:%d",
 			aliveDone, aliveTotal, aliveOk,
 			mediaDone, aliveOk, filterPass,
 			speedOk)
 	}
-	return fmt.Sprintf("流水线: 测活 %d/%d (存活:%d) | 媒体 %d/%d (通过:%d)",
+	return fmt.Sprintf("Pipeline: alive %d/%d (alive:%d) | media %d/%d (passed:%d)",
 		aliveDone, aliveTotal, aliveOk,
 		mediaDone, aliveOk, filterPass)
 }

@@ -13,14 +13,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// initConfigPath 初始化配置文件路径
+// initConfigPath initializes the config file path.
 func (app *App) initConfigPath() error {
 	if app.configPath == "" {
 		execPath := utils.GetExecutablePath()
 		configDir := filepath.Join(execPath, "config")
 
 		if err := os.MkdirAll(configDir, 0755); err != nil {
-			return fmt.Errorf("创建配置目录失败: %w", err)
+			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
 		app.configPath = filepath.Join(configDir, "config.yaml")
@@ -28,48 +28,49 @@ func (app *App) initConfigPath() error {
 	return nil
 }
 
-// loadConfig 加载配置文件
+// loadConfig loads the config file.
 func (app *App) loadConfig() error {
 	yamlFile, err := os.ReadFile(app.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return app.createDefaultConfig()
 		}
-		return fmt.Errorf("读取配置文件失败: %w", err)
+		return fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	if err := yaml.Unmarshal(yamlFile, config.GlobalConfig); err != nil {
-		return fmt.Errorf("解析配置文件失败: %w", err)
+		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	slog.Info("配置文件读取成功")
+	slog.Info("Config file loaded")
 	return nil
 }
 
-// createDefaultConfig 创建默认配置文件
+// createDefaultConfig creates the default config file.
 func (app *App) createDefaultConfig() error {
-	slog.Info("配置文件不存在，创建默认配置文件")
+	slog.Info("Config file does not exist; creating default config file")
 
 	if err := os.WriteFile(app.configPath, []byte(config.DefaultConfigTemplate), 0644); err != nil {
-		return fmt.Errorf("写入默认配置文件失败: %w", err)
+		return fmt.Errorf("failed to write default config file: %w", err)
 	}
 
-	slog.Info("默认配置文件创建成功")
-	slog.Info(fmt.Sprintf("请编辑配置文件: %s", app.configPath))
+	slog.Info("Default config file created")
+	slog.Info(fmt.Sprintf("Please edit the config file: %s", app.configPath))
 	os.Exit(0)
 	return nil
 }
 
-// initConfigWatcher 初始化配置文件监听
+// initConfigWatcher initializes config file watching.
 func (app *App) initConfigWatcher() error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("创建文件监听器失败: %w", err)
+		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
 	app.watcher = watcher
 
-	// 防抖定时器，防止vscode等软件先临时创建文件在覆盖，会产生两次write事件
+	// Debounce timer. Editors such as VS Code may create a temp file before
+	// overwriting, which produces two write events.
 	var debounceTimer *time.Timer
 	go func() {
 		for {
@@ -81,25 +82,25 @@ func (app *App) initConfigWatcher() error {
 				if absPath, _ := filepath.Abs(app.configPath); event.Name != absPath {
 					continue
 				}
-				// 兼容容器外修改
+				// Support changes made from outside the container.
 				if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
-					// 如果定时器存在，重置它
+					// Reset the timer if it already exists.
 					if debounceTimer != nil {
 						debounceTimer.Stop()
 					}
 
-					// 创建新的定时器，延迟100ms执行
+					// Create a new timer with a 100ms delay.
 					debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
-						slog.Info("配置文件发生变化，正在重新加载")
+						slog.Info("Config file changed; reloading")
 						oldCronExpr := config.GlobalConfig.CronExpression
 						oldInterval := app.interval
 
 						if err := app.loadConfig(); err != nil {
-							slog.Error(fmt.Sprintf("重新加载配置文件失败: %v", err))
+							slog.Error(fmt.Sprintf("Failed to reload config file: %v", err))
 							return
 						}
 
-						// 检查cron表达式或检测间隔是否变化
+						// Check whether the cron expression or check interval changed.
 						if oldCronExpr != config.GlobalConfig.CronExpression ||
 							oldInterval != config.GlobalConfig.CheckInterval {
 
@@ -109,9 +110,9 @@ func (app *App) initConfigWatcher() error {
 								}
 								return config.GlobalConfig.CheckInterval
 							}()
-							slog.Warn("检测设置发生变化，重新配置定时器")
+							slog.Warn("Check settings changed; reconfiguring timer")
 
-							// 使用setTimer方法重新设置定时器
+							// Reconfigure the timer through setTimer.
 							app.setTimer()
 						}
 					})
@@ -120,16 +121,16 @@ func (app *App) initConfigWatcher() error {
 				if !ok {
 					return
 				}
-				slog.Error(fmt.Sprintf("配置文件监听错误: %v", err))
+				slog.Error(fmt.Sprintf("Config file watcher error: %v", err))
 			}
 		}
 	}()
 
-	// 开始监听配置文件目录
+	// Start watching the config file directory.
 	if err := watcher.Add(filepath.Dir(app.configPath)); err != nil {
-		return fmt.Errorf("添加配置文件监听失败: %w", err)
+		return fmt.Errorf("failed to add config file watcher: %w", err)
 	}
 
-	slog.Info("配置文件监听已启动")
+	slog.Info("Config file watcher started")
 	return nil
 }

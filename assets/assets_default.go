@@ -7,6 +7,6 @@ import (
 	_ "embed"
 )
 
-// 其他不支持的平台
-// 需要手动指定NODEBIN_PATH
+// Other unsupported platforms.
+// NODEBIN_PATH must be specified manually.
 var EmbeddedNode []byte

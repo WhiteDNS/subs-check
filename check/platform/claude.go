@@ -7,15 +7,15 @@ import (
 
 var claudeRe = regexp.MustCompile(`loc=([A-Z]{2})`)
 
-// Claude 封禁地区列表（二字码）
+// Claude blocked region list (alpha-2 codes).
 var claudeBlockedRegions = map[string]bool{
 	"AF": true, "BY": true, "CN": true, "CU": true, "HK": true,
 	"IR": true, "KP": true, "MO": true, "RU": true, "SY": true,
 }
 
-// CheckClaude 检测 Claude 解锁状态
-// 通过 cdn-cgi/trace 提取地区码，再用封禁列表过滤
-// 返回地区二字码（如 "US"），空字符串表示不可用
+// CheckClaude checks Claude unlock status.
+// It extracts the region code through cdn-cgi/trace and filters with the blocked list.
+// Returns an alpha-2 region code such as "US"; an empty string means unavailable.
 func CheckClaude(httpClient *http.Client) (string, error) {
 	req, err := http.NewRequest("GET", "https://claude.ai/cdn-cgi/trace", nil)
 	if err != nil {

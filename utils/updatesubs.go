@@ -11,12 +11,12 @@ import (
 	"github.com/beck-8/subs-check/config"
 )
 
-// 定义通用的 HTTP 客户端接口
+// HTTPClient defines the common HTTP client interface.
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// API 响应的结构体
+// APIResponse is the API response structure.
 type versionResponse struct {
 	Version string `json:"version"`
 }
@@ -27,18 +27,18 @@ type providersResponse struct {
 	} `json:"providers"`
 }
 
-// makeRequest 处理通用的 HTTP 请求逻辑
+// makeRequest handles common HTTP request logic.
 func makeRequest(client httpClient, method, url string) ([]byte, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.GlobalConfig.MihomoApiSecret))
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("执行请求失败: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -46,12 +46,12 @@ func makeRequest(client httpClient, method, url string) ([]byte, error) {
 		if resp.StatusCode == http.StatusNoContent {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("API 返回非 200 状态码: %d", resp.StatusCode)
+		return nil, fmt.Errorf("API returned non-200 status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("读取响应体失败: %w", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	return body, nil
@@ -59,29 +59,29 @@ func makeRequest(client httpClient, method, url string) ([]byte, error) {
 
 func UpdateSubs() {
 	if config.GlobalConfig.MihomoApiUrl == "" {
-		// slog.Warn("未配置 MihomoApiUrl，跳过更新")
+		// slog.Warn("MihomoApiUrl is not configured; skipping update")
 		return
 	}
 
 	version, err := getVersion(http.DefaultClient)
 	if err != nil {
-		slog.Error(fmt.Sprintf("获取版本失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to get version: %v", err))
 		return
 	}
 
-	slog.Info(fmt.Sprintf("当前Mihomo版本: %s", version))
+	slog.Info(fmt.Sprintf("Current Mihomo version: %s", version))
 
 	names, err := getNeedUpdateNames(http.DefaultClient)
 	if err != nil {
-		slog.Error(fmt.Sprintf("获取需要更新的订阅失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to get subscriptions that need updating: %v", err))
 		return
 	}
 
 	if err := updateSubs(http.DefaultClient, names); err != nil {
-		slog.Error(fmt.Sprintf("更新订阅失败: %v", err))
+		slog.Error(fmt.Sprintf("Failed to update subscriptions: %v", err))
 		return
 	}
-	slog.Info("订阅更新完成")
+	slog.Info("Subscription update completed")
 }
 
 func getVersion(client httpClient) (string, error) {
@@ -93,7 +93,7 @@ func getVersion(client httpClient) (string, error) {
 
 	var version versionResponse
 	if err := json.Unmarshal(body, &version); err != nil {
-		return "", fmt.Errorf("解析版本信息失败: %w", err)
+		return "", fmt.Errorf("failed to parse version info: %w", err)
 	}
 	return version.Version, nil
 }
@@ -107,7 +107,7 @@ func getNeedUpdateNames(client httpClient) ([]string, error) {
 
 	var response providersResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("解析提供者信息失败: %w", err)
+		return nil, fmt.Errorf("failed to parse provider info: %w", err)
 	}
 
 	var names []string
@@ -123,9 +123,9 @@ func updateSubs(client httpClient, names []string) error {
 	for _, name := range names {
 		url := fmt.Sprintf("%s/providers/proxies/%s", config.GlobalConfig.MihomoApiUrl, name)
 		if _, err := makeRequest(client, http.MethodPut, url); err != nil {
-			slog.Error(fmt.Sprintf("更新订阅%v失败: %v", name, err))
+			slog.Error(fmt.Sprintf("Failed to update subscription %v: %v", name, err))
 		}
-		slog.Info(fmt.Sprintf("成功更新订阅: %s", name))
+		slog.Info(fmt.Sprintf("Successfully updated subscription: %s", name))
 	}
 	return nil
 }

@@ -30,7 +30,7 @@ func CheckTikTok(httpClient *http.Client) (string, error) {
 	}
 	body := buf.Bytes()
 
-	// 使用正则匹配 "region":"XX"
+	// Use a regex to match "region":"XX".
 	matches := tiktokRe.FindSubmatch(body)
 	if len(matches) >= 2 {
 		return string(matches[1]), nil

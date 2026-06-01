@@ -20,22 +20,22 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// App 结构体用于管理应用程序状态
+// App manages application state.
 type App struct {
 	configPath string
 	interval   int
 	watcher    *fsnotify.Watcher
-	checkChan  chan struct{} // 触发检测的通道
-	checking   atomic.Bool   // 检测状态标志
+	checkChan  chan struct{} // Channel used to trigger checks.
+	checking   atomic.Bool   // Check state flag.
 	ticker     *time.Ticker
-	done       chan struct{} // 用于结束ticker goroutine的信号
-	cron       *cron.Cron    // crontab调度器
+	done       chan struct{} // Signal used to stop the ticker goroutine.
+	cron       *cron.Cron    // Crontab scheduler.
 	version    string
 }
 
-// New 创建新的应用实例
+// New creates a new application instance.
 func New(version string) *App {
-	configPath := flag.String("f", "", "配置文件路径")
+	configPath := flag.String("f", "", "config file path")
 	flag.Parse()
 
 	return &App{
@@ -46,29 +46,29 @@ func New(version string) *App {
 	}
 }
 
-// Initialize 初始化应用程序
+// Initialize initializes the application.
 func (app *App) Initialize() error {
-	// 初始化配置文件路径
+	// Initialize config file path.
 	if err := app.initConfigPath(); err != nil {
-		return fmt.Errorf("初始化配置文件路径失败: %w", err)
+		return fmt.Errorf("failed to initialize config file path: %w", err)
 	}
 
-	// 加载配置文件
+	// Load config file.
 	if err := app.loadConfig(); err != nil {
-		return fmt.Errorf("加载配置文件失败: %w", err)
+		return fmt.Errorf("failed to load config file: %w", err)
 	}
 
-	// 初始化 DNS resolver（必须在任何 proxy 连接之前，影响 mihomo 全局 resolver）
+	// Initialize DNS resolver before any proxy connection because it affects mihomo's global resolver.
 	if err := initResolver(); err != nil {
-		return fmt.Errorf("初始化 DNS 失败: %w", err)
+		return fmt.Errorf("failed to initialize DNS: %w", err)
 	}
 
-	// 初始化配置文件监听
+	// Initialize config file watcher.
 	if err := app.initConfigWatcher(); err != nil {
-		return fmt.Errorf("初始化配置文件监听失败: %w", err)
+		return fmt.Errorf("failed to initialize config file watcher: %w", err)
 	}
 
-	// 从配置文件中读取代理，设置代理
+	// Read the proxy from config and set proxy environment variables.
 	if config.GlobalConfig.Proxy != "" {
 		os.Setenv("HTTP_PROXY", config.GlobalConfig.Proxy)
 		os.Setenv("HTTPS_PROXY", config.GlobalConfig.Proxy)
@@ -83,28 +83,28 @@ func (app *App) Initialize() error {
 
 	if config.GlobalConfig.ListenPort != "" {
 		if err := app.initHttpServer(); err != nil {
-			return fmt.Errorf("初始化HTTP服务器失败: %w", err)
+			return fmt.Errorf("failed to initialize HTTP server: %w", err)
 		}
 	}
 
 	if config.GlobalConfig.SubStorePort != "" {
 		if runtime.GOOS == "linux" && runtime.GOARCH == "386" {
-			slog.Warn("node不支持Linux 32位系统，不启动sub-store服务")
+			slog.Warn("node does not support 32-bit Linux; sub-store service will not start")
 		}
 		go assets.RunSubStoreService()
-		// 求等吗得，日志会按预期顺序输出
+		// Wait briefly so logs are emitted in the expected order.
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// 启动内存监控
+	// Start memory monitoring.
 	monitor.StartMemoryMonitor()
 
-	// 设置信号处理器
+	// Set up signal handlers.
 	utils.SetupSignalHandler(check.RequestCancel)
 	return nil
 }
 
-// Run 运行应用程序主循环
+// Run runs the application main loop.
 func (app *App) Run() {
 	defer func() {
 		app.watcher.Close()
@@ -116,124 +116,124 @@ func (app *App) Run() {
 		}
 	}()
 
-	// 设置初始定时器模式
+	// Set the initial timer mode.
 	app.setTimer()
 
-	// 仅在cron表达式为空时，首次启动立即执行检测
+	// Run the first check immediately only when the cron expression is empty.
 	if config.GlobalConfig.CronExpression != "" {
-		slog.Warn("使用cron表达式，首次启动不立即执行检测")
+		slog.Warn("Cron expression is configured; the first check will not run immediately")
 	} else {
 		app.triggerCheck()
 	}
 
-	// 在主循环中处理手动触发
+	// Handle manual triggers in the main loop.
 	for range app.checkChan {
 		go app.triggerCheck()
 	}
 }
 
-// setTimer 根据配置设置定时器
+// setTimer configures the timer from config.
 func (app *App) setTimer() {
-	// 停止现有定时器
+	// Stop the existing timer.
 	if app.ticker != nil {
-		// 应该先发送停止信号，防止被=nil后panic
-		close(app.done)                // 发送停止信号
-		app.done = make(chan struct{}) // 创建新通道
+		// Send the stop signal first to avoid panics after nil assignment.
+		close(app.done)                // Send stop signal.
+		app.done = make(chan struct{}) // Create a new channel.
 		app.ticker.Stop()
 		app.ticker = nil
 	}
 
-	// 停止现有cron
+	// Stop the existing cron scheduler.
 	if app.cron != nil {
 		app.cron.Stop()
 		app.cron = nil
 	}
 
-	// 检查是否设置了cron表达式
+	// Check whether a cron expression is configured.
 	if config.GlobalConfig.CronExpression != "" {
-		slog.Info(fmt.Sprintf("使用cron表达式: %s", config.GlobalConfig.CronExpression))
+		slog.Info(fmt.Sprintf("Using cron expression: %s", config.GlobalConfig.CronExpression))
 		app.cron = cron.New()
 		_, err := app.cron.AddFunc(config.GlobalConfig.CronExpression, func() {
 			app.triggerCheck()
 		})
 		if err != nil {
-			slog.Error(fmt.Sprintf("cron表达式 '%s' 解析失败: %v，将使用检查间隔时间",
+			slog.Error(fmt.Sprintf("Failed to parse cron expression '%s': %v; falling back to check interval",
 				config.GlobalConfig.CronExpression, err))
-			// 使用间隔时间
+			// Use interval mode.
 			app.useIntervalTimer()
 		} else {
 			app.cron.Start()
 		}
 	} else {
-		// 使用间隔时间
+		// Use interval mode.
 		app.useIntervalTimer()
 	}
 }
 
-// useIntervalTimer 使用间隔时间模式运行
+// useIntervalTimer runs in interval mode.
 func (app *App) useIntervalTimer() {
-	// 初始化定时器
+	// Initialize timer.
 	app.ticker = time.NewTicker(time.Duration(app.interval) * time.Minute)
 	done := app.done
-	// 启动一个goroutine监听定时器事件
+	// Start a goroutine to listen for timer events.
 	go func() {
 		for {
 			select {
 			case <-app.ticker.C:
 				app.triggerCheck()
 			case <-done:
-				return // 收到停止信号，退出goroutine
+				return // Stop signal received; exit goroutine.
 			}
 		}
 	}()
 }
 
-// TriggerCheck 供外部调用的触发检测方法
+// TriggerCheck exposes check triggering to callers.
 func (app *App) TriggerCheck() {
 	select {
 	case app.checkChan <- struct{}{}:
-		slog.Info("手动触发检测")
+		slog.Info("Manual check triggered")
 	default:
-		slog.Warn("已有检测正在进行，忽略本次触发")
+		slog.Warn("A check is already running; ignoring this trigger")
 	}
 }
 
-// triggerCheck 内部检测方法
+// triggerCheck runs the internal check flow.
 func (app *App) triggerCheck() {
-	// 如果已经在检测中，直接返回
+	// Return immediately if a check is already running.
 	if !app.checking.CompareAndSwap(false, true) {
-		slog.Warn("已有检测正在进行，跳过本次检测")
+		slog.Warn("A check is already running; skipping this check")
 		return
 	}
 	defer app.checking.Store(false)
 
 	if err := app.checkProxies(); err != nil {
-		slog.Error(fmt.Sprintf("检测代理失败: %v", err))
+		slog.Error(fmt.Sprintf("Proxy check failed: %v", err))
 		os.Exit(1)
 	}
 
-	// 检测完成后显示下次检查时间
+	// Show the next check time after a check completes.
 	if app.ticker != nil {
-		// 使用间隔时间模式
+		// Interval mode.
 		app.ticker.Reset(time.Duration(app.interval) * time.Minute)
 		nextCheck := time.Now().Add(time.Duration(app.interval) * time.Minute)
-		slog.Info(fmt.Sprintf("下次检查时间: %s", nextCheck.Format("2006-01-02 15:04:05")))
+		slog.Info(fmt.Sprintf("Next check time: %s", nextCheck.Format("2006-01-02 15:04:05")))
 	} else if app.cron != nil {
-		// 使用cron模式
+		// Cron mode.
 		entries := app.cron.Entries()
 		if len(entries) > 0 {
 			nextTime := entries[0].Next
-			slog.Info(fmt.Sprintf("下次检查时间: %s", nextTime.Format("2006-01-02 15:04:05")))
+			slog.Info(fmt.Sprintf("Next check time: %s", nextTime.Format("2006-01-02 15:04:05")))
 		}
 	}
 	debug.FreeOSMemory()
 }
 
-// checkProxies 执行代理检测
+// checkProxies runs proxy checks.
 func (app *App) checkProxies() error {
-	slog.Info("开始准备检测代理", "进度展示", config.GlobalConfig.PrintProgress)
+	slog.Info("Preparing proxy checks", "show-progress", config.GlobalConfig.PrintProgress)
 
-	// 加载历史可用节点到待测队列
+	// Load historical usable nodes into the check queue.
 	if config.GlobalConfig.KeepDays > 0 {
 		if hp := save.LoadHistoryProxies(); len(hp) > 0 {
 			config.GlobalProxies = append(config.GlobalProxies, hp...)
@@ -242,14 +242,14 @@ func (app *App) checkProxies() error {
 
 	results, err := check.Check()
 	if err != nil {
-		return fmt.Errorf("检测代理失败: %w", err)
+		return fmt.Errorf("proxy check failed: %w", err)
 	}
-	slog.Info("检测完成")
+	slog.Info("Check completed")
 	save.SaveConfig(results)
 	utils.SendNotify(len(results))
 	utils.UpdateSubs()
 
-	// 执行回调脚本
+	// Execute callback script.
 	utils.ExecuteCallback(len(results))
 
 	return nil

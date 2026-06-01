@@ -19,13 +19,13 @@ func CompileFilterPatterns() []*regexp.Regexp {
 	for _, pattern := range config.GlobalConfig.Filter {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("过滤正则表达式编译失败，已跳过: %s, 错误: %v", pattern, err))
+			slog.Warn(fmt.Sprintf("Filter regex failed to compile and was skipped: %s, error: %v", pattern, err))
 			continue
 		}
 		patterns = append(patterns, re)
 	}
 	if len(patterns) == 0 && len(config.GlobalConfig.Filter) > 0 {
-		slog.Warn("所有过滤正则表达式编译失败，跳过过滤")
+		slog.Warn("All filter regexes failed to compile; skipping filtering")
 	}
 	return patterns
 }
@@ -48,18 +48,19 @@ func MatchesFilter(r Result, patterns []*regexp.Regexp) bool {
 	return false
 }
 
-// FilterResults 根据配置的正则表达式过滤节点。
+// FilterResults filters nodes using the configured regular expressions.
 //
-// 只有渲染后的展示名(不含速度标签)匹配任一正则的节点才会被保留。
-// 这里用 RenderName(r, false) 而不是 r.Proxy["name"] 是为了让 filter 能看到
-// 国家+媒体标签的完整视图,同时保持 proxy["name"] 不被修改。
+// Only nodes whose rendered display name (without speed tags) matches at least
+// one regex are kept. Use RenderName(r, false) instead of r.Proxy["name"] so
+// filtering sees the full country + media-tag view while leaving proxy["name"]
+// unchanged.
 func FilterResults(results []Result) []Result {
 	patterns := CompileFilterPatterns()
 	if len(patterns) == 0 {
 		return results
 	}
 
-	slog.Info(fmt.Sprintf("应用节点过滤规则，共 %d 个正则表达式", len(patterns)))
+	slog.Info(fmt.Sprintf("Applying node filters: %d regexes", len(patterns)))
 
 	var filtered []Result
 	for _, r := range results {
@@ -68,6 +69,6 @@ func FilterResults(results []Result) []Result {
 		}
 	}
 
-	slog.Info(fmt.Sprintf("过滤后节点数量: %d (过滤前: %d)", len(filtered), len(results)))
+	slog.Info(fmt.Sprintf("Nodes after filtering: %d (before: %d)", len(filtered), len(results)))
 	return filtered
 }

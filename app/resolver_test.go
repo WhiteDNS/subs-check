@@ -47,7 +47,7 @@ func TestParseNameservers(t *testing.T) {
 func TestParseNameserversLenient(t *testing.T) {
 	t.Run("all unsupported scheme returns error", func(t *testing.T) {
 		_, err := parseNameservers([]string{"ftp://a", "ssh://b"}, "test")
-		if err == nil || !strings.Contains(err.Error(), "全部无效") {
+		if err == nil || !strings.Contains(err.Error(), "no valid entries") {
 			t.Errorf("expected 'all invalid' error, got %v", err)
 		}
 	})
@@ -118,7 +118,7 @@ func TestInitResolverFallbacks(t *testing.T) {
 			Nameserver: []string{"ftp://example.com"},
 		}
 		err := initResolver()
-		if err == nil || !strings.Contains(err.Error(), "全部无效") {
+		if err == nil || !strings.Contains(err.Error(), "no valid entries") {
 			t.Errorf("expected all-invalid error, got %v", err)
 		}
 	})
@@ -129,7 +129,7 @@ func TestInitResolverFallbacks(t *testing.T) {
 			DefaultNameserver: []string{"223.5.5.511", "dns.alidns.com"},
 		}
 		err := initResolver()
-		if err == nil || !strings.Contains(err.Error(), "全部无效") {
+		if err == nil || !strings.Contains(err.Error(), "no valid entries") {
 			t.Errorf("expected 'all invalid' error, got %v", err)
 		}
 	})

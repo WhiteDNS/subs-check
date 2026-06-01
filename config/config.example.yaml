@@ -1,96 +1,105 @@
-# 是否显示进度
+# Whether to show progress.
 print-progress: true
 
-# 并发线程数（测活阶段使用此值）
+# Concurrent worker count. The alive-check stage uses this value.
 concurrent: 50
-# 流媒体检测并发数（默认等于concurrent）
+# Media-check concurrency. Defaults to concurrent.
 media-concurrent: 20
-# 测速并发数（默认等于concurrent）
-# 建议设置较低值，避免并发抢带宽导致测速不准
+# Speed-test concurrency. Defaults to concurrent.
+# A lower value is recommended to avoid bandwidth contention and inaccurate results.
 speed-concurrent: 20
-# 是否打乱节点的测试顺序（仅影响测试先后，输出顺序保持订阅原序不变）
-# 开启后可避免同机场相邻节点、同节点的多个协议被扎堆在同一时间窗口测试，
-# 从而降低相邻IP一起出问题、互相干扰的概率
+# Whether to shuffle node test order. This only affects test timing; output
+# still preserves the original subscription order.
+# This can prevent adjacent provider nodes or multiple protocols of the same
+# node from being tested in the same time window, reducing interference.
 shuffle-test-order: true
-# 检查间隔(分钟)
-# 必须大于0，小于等于0会设置间隔1分钟
+# Check interval in minutes.
+# Must be greater than 0; values <= 0 are treated as 1 minute.
 check-interval: 120
-# cron表达式，如果配置了此项，将忽略check-interval
-# 支持标准cron表达式，如：
-# "0 */2 * * *" 表示每2小时的整点执行
-# "0 0 */2 * *" 表示每2天的0点执行
-# "0 0 1 * *" 表示每月1日0点执行
-# "*/30 * * * *" 表示每30分钟执行一次
+# Cron expression. If configured, check-interval is ignored.
+# Standard cron expressions are supported, for example:
+# "0 */2 * * *" runs every 2 hours on the hour.
+# "0 0 */2 * *" runs every 2 days at 00:00.
+# "0 0 1 * *" runs at 00:00 on the first day of every month.
+# "*/30 * * * *" runs every 30 minutes.
 # cron-expression: "*/30 * * * *"
 
-# 保存几个成功的节点，为0代表不限制 
-# 如果你的并发数量超过这个参数，那么成功的结果可能会大于这个数值
+# Number of successful nodes to keep. 0 means unlimited.
+# If concurrency is greater than this value, successful results may exceed it:
 # success-limit <= success <= success-limit+concurrent
 success-limit: 0
 
-# 超时时间(毫秒)(节点的最大延迟)
+# Timeout in milliseconds. This is the maximum allowed node latency.
 timeout: 5000
-# 延迟测试URL
-# 一些高级用法需要自己摸索，比如想要拒绝某些CF类节点，可将url替换为https://www.cloudflare.com
+# Latency test URL.
+# Advanced usage is up to you. For example, to reject some CF-like nodes,
+# replace this URL with https://www.cloudflare.com.
 alive-test-url: http://gstatic.com/generate_204
-# 测速地址(注意 并发数*节点速度<最大网速 否则测速结果不准确)
-# 尽量不要使用Speedtest，Cloudflare提供的下载链接，因为很多节点屏蔽测速网站
-# 如果找不到稳定的测速地址，可以自建测速地址
+# Speed-test URL. Make sure concurrency * node speed is below your maximum
+# bandwidth; otherwise results will be inaccurate.
+# Avoid Speedtest or Cloudflare download links when possible because many nodes
+# block speed-test sites. If you cannot find a stable URL, host your own.
 speed-test-url: https://github.com/AaronFeng753/Waifu2x-Extension-GUI/releases/download/v2.21.12/Waifu2x-Extension-GUI-v2.21.12-Portable.7z
-# 最低测速结果舍弃(KB/s)
+# Discard nodes below this speed-test result (KB/s).
 min-speed: 512
-# 下载测试时间(s)(与下载链接大小相关，默认最大测试10s)
+# Download test duration in seconds. Related to the download file size; default maximum is 10s.
 download-timeout: 10
-# 单节点测速下载数据大小(MB)限制，0为不限
+# Per-node speed-test download size limit in MB. 0 means unlimited.
 download-mb: 20
-# 总下载速度速度限制(MB/s)，0为不限
+# Total download speed limit in MB/s. 0 means unlimited.
 total-speed-limit: 0
 
-# 监听端口，用于直接返回节点信息，方便订阅转换
+# Listen port, used to directly serve node information for subscription conversion.
 # http://127.0.0.1:8199/all.yaml
-# 注意：为方便小白默认监听0.0.0.0:8199，请自行修改
-# 更新需重启程序
+# Note: the default listens on 0.0.0.0:8199 for ease of use. Change it if needed.
+# Restart the program after changing this value.
 listen-port: ":8199"
 
-# 以节点IP查询位置重命名节点
-# 质量差的节点可能造成IP查询失败，造成整体检查速度稍微变慢，默认true
+# Rename nodes by looking up their IP location.
+# Low-quality nodes may cause IP lookup failures and slightly slow the whole check. Default: true.
 rename-node: true
-# 节点前缀，依赖rename-node为true才生效
+# Node prefix. Only effective when rename-node is true.
 node-prefix: ""
+# Optional node-name template. When set, it overrides the built-in node name.
+# Supported placeholders: {Flag}, {CountryFlag}, {Country}, {Index}, {ShortID}, {Name}, {ActualName}, {Speed}, {Tags}
+# {ShortID} is country plus per-country index, such as US1, DE2, or OT3.
+# {Speed} is empty unless speed-test-url is set and the node passes speed testing.
+node-name-template: ""
 
-# 只测试指定协议的节点
+# Test only nodes with selected protocols.
 node-type:
   # - ss
   # - vmess
   # - vless
 
-# 节点名称过滤，只有匹配任一正则表达式的节点才会被保留
-# 如果为空则不过滤，所有通过测试的节点都会保留
-# 注意：过滤在流媒体检测+重命名之后、测速之前进行。此时节点名称已包含
-#       国家和媒体标签（如 NF-US、GPT⁺、IP 风险百分比），但**不包含速度标签**。
-#       速度标签在测速通过后追加，不参与过滤。
+# Node-name filters. Only nodes matching at least one regex are kept.
+# Empty means no filtering; all nodes that pass checks are kept.
+# Filtering happens after media checks + renaming and before speed testing. At
+# that point names contain country and media tags such as NF-US, GPT+, and IP
+# risk percentage, but not speed tags. Speed tags are appended only after speed
+# testing and do not participate in filtering.
 filter:
-  # === 按地区过滤 ===
-  # - "香港|HK|Hong Kong"        # 保留香港节点
-  # - "新加坡|SG|Singapore"      # 保留新加坡节点
-  # - "台湾|TW|Taiwan"           # 保留台湾节点
+  # === Filter by region ===
+  # - "HK|Hong Kong"             # Keep Hong Kong nodes.
+  # - "SG|Singapore"             # Keep Singapore nodes.
+  # - "TW|Taiwan"                # Keep Taiwan nodes.
   #
-  # === 按 IP 风险过滤（需开启 media-check 和 iprisk）===
-  # - "\\|[0-4]?[0-9]%"          # 保留 IP 风险 < 50% 的节点
-  # - "\\|[0-9]%\\|"             # 保留 IP 风险 < 10% 的节点（个位数）
+  # === Filter by IP risk (requires media-check and iprisk) ===
+  # - "\\|[0-4]?[0-9]%"          # Keep nodes with IP risk < 50%.
+  # - "\\|[0-9]%\\|"             # Keep nodes with IP risk < 10% (single digit).
   #
-  # === 按平台解锁过滤（需开启 media-check）===
-  # - "GPT⁺|GPT"                 # 保留解锁 OpenAI 的节点
-  # - "NF"                       # 保留解锁 Netflix 的节点（NF=仅自制剧, NF-US=全解锁）
-  # - "GM"                       # 保留解锁 Gemini 的节点
-  # - "D\\+"                     # 保留解锁 Disney+ 的节点
-  # - "YT-"                      # 保留解锁 YouTube Premium 的节点
-  # - "CL-"                      # 保留解锁 Claude 的节点
-  # - "SP-"                      # 保留解锁 Spotify 的节点
+  # === Filter by platform unlock (requires media-check) ===
+  # - "GPT⁺|GPT"                 # Keep nodes that unlock OpenAI.
+  # - "NF"                       # Keep nodes that unlock Netflix (NF=Originals only, NF-US=full unlock).
+  # - "GM"                       # Keep nodes that unlock Gemini.
+  # - "D\\+"                     # Keep nodes that unlock Disney+.
+  # - "YT-"                      # Keep nodes that unlock YouTube Premium.
+  # - "CL-"                      # Keep nodes that unlock Claude.
+  # - "SP-"                      # Keep nodes that unlock Spotify.
 
-# 是否开启流媒体检测，其中IP欺诈依赖重命名
+# Whether to enable media checks. IP fraud checks depend on renaming.
 media-check: false
-# 流媒体检测超时时间(秒)，未设置则默认为10秒
+# Media-check timeout in seconds. Defaults to 10 seconds when unset.
 media-check-timeout: 5
 platforms:
   - iprisk
@@ -103,75 +112,78 @@ platforms:
   - claude
   - spotify
 
-# 保留最近N天内可用的历史节点（天）
-# 开启后每次检测会保存节点快照到 output/history/ 目录
-# 下次检测时会将历史节点加入待测队列重新检测，通过的节点才会保留到输出中
-# 过期的历史文件会自动清理
-# 0 = 关闭此功能
+# Keep usable historical nodes from the last N days.
+# When enabled, each check saves a node snapshot under output/history/.
+# The next check adds historical nodes to the queue and tests them again; only
+# passing nodes are kept in output. Expired history files are cleaned automatically.
+# 0 disables this feature.
 keep-days: 0
 
-# 输出目录
-# 如果为空，则为程序所在目录的config目录
+# Output directory.
+# If empty, the config directory under the program directory is used.
 output-dir: ""
 
-# 是否启用Web控制面板
-# 如果为false，则不启动Web控制界面，仅启动订阅服务相关接口
-# 访问地址：http://127.0.0.1:8199/admin
+# Whether to enable the web control panel.
+# If false, the web UI is not started; only subscription-service APIs run.
+# URL: http://127.0.0.1:8199/admin
 enable-web-ui: true
-# 填写Web控制面板的api-key，如果为空，则自动生成
-# 配置文件为空时，支持使用环境变量设置 API_KEY
+# API key for the web control panel. If empty, one is generated automatically.
+# When the config value is empty, API_KEY can also be set through the environment.
 api-key: ""
 
-# 检测完成后执行的回调脚本路径
-# 脚本将在检测完成后执行，可用于自定义通知或其他操作
-# 例如: "/path/to/your/script.sh" 或 'C:\path\to\your\script.bat'
-# Linux请在脚本开头添加对应的：#!/bin/bash、#!/bin/sh、#!/usr/bin/env bash 等，编写标准的脚本
-# 注意如果使用docker，目前docker使用的alpine，只有sh，不支持bash
+# Path to a callback script that runs after checks complete.
+# The script can be used for custom notifications or other actions.
+# Examples: "/path/to/your/script.sh" or 'C:\path\to\your\script.bat'
+# On Linux, add a shebang at the start, such as #!/bin/bash, #!/bin/sh, or #!/usr/bin/env bash.
+# Docker currently uses Alpine and only provides sh, not bash.
 callback-script: ""
 
-# 填写搭建的apprise API server 地址
+# Apprise API server URL.
 # https://notify.xxxx.us.kg/notify
 apprise-api-server: ""
-# 填写通知目标
-# 支持100+ 个通知渠道，详细格式请参照 https://github.com/caronc/apprise
+# Notification targets.
+# Supports 100+ notification channels. See https://github.com/caronc/apprise for formats.
 recipient-url: 
-  # telegram格式：tgram://{bot_token}/{chat_id}
+  # Telegram format: tgram://{bot_token}/{chat_id}
   # - tgram://xxxxxx/-1002149239223
-  # 钉钉格式：dingtalk://{Secret}@{ApiKey}
+  # DingTalk format: dingtalk://{Secret}@{ApiKey}
   # - dingtalk://xxxxxx@xxxxxxx
-# 自定义通知标题
-notify-title: "🔔 节点状态更新"
+# Custom notification title.
+notify-title: "🔔 Node Status Update"
 
-# sub-store的启动端口，为空则不启动sub-store
-# 更新需重启程序，不可监听局域网IP，只有三种写法 :8299, 127.0.0.1:8299, 0.0.0.0:8299
+# sub-store startup port. Empty means sub-store will not start.
+# Restart after changing this value. Do not listen on LAN IPs. Valid forms:
+# :8299, 127.0.0.1:8299, or 0.0.0.0:8299.
 # sub-store-port: ":8299"
 sub-store-port: ":8299"
-# sub-store自定义访问路径，必须以/开头，后续访问订阅也要带上此路径
-# 设置path之后，还可以开启订阅分享功能，无需暴露真实的path
+# Custom sub-store access path. Must start with /. Future subscription access must include this path.
+# After setting a path, subscription sharing can be enabled without exposing the real path.
 # sub-store-path: "/path"
 sub-store-path: ""
-# 以下配置去查看sub-store相关的教程：https://hub.docker.com/r/xream/sub-store
-# sub-store同步gist定时任务
-# 定时任务指定时将订阅/文件上传到私有 Gist. 在前端, 叫做 同步 或 同步配置.
-# 55 23 * * * 每天 23 点 55 分(避开部分机场后端每天0点定时重启)
+# For the following settings, see sub-store docs: https://hub.docker.com/r/xream/sub-store
+# sub-store scheduled Gist sync.
+# This uploads subscriptions/files to a private Gist on schedule. In the frontend
+# it is called sync or sync config.
+# 55 23 * * * means 23:55 every day, avoiding provider backends that restart at 00:00.
 sub-store-sync-cron: ""
-# 定时更新订阅
-# SUB_STORE_PRODUCE_CRON 在后台定时处理订阅. 格式为 0 */2 * * *,sub,a;0 */3 * * *,col,b
-# 即每 2 小时处理一次单条订阅 a, 每 3 小时处理一次组合订阅 b.
+# Scheduled subscription updates.
+# SUB_STORE_PRODUCE_CRON processes subscriptions in the background.
+# Format: 0 */2 * * *,sub,a;0 */3 * * *,col,b
+# This means process single subscription a every 2 hours and collection b every 3 hours.
 sub-store-produce-cron: ""
-# sub-store推送服务地址
-# 例如：Brak: "SUB_STORE_PUSH_SERVICE=https://api.day.app/XXXXXXXXXXXX/[推送标题]/[推送内容]"
-# 注意：仅需修改 XXXXXXXXXXXX 为自己的 token，[推送标题]/[推送内容] 会被sub-store自动替换为对应的内容
+# sub-store push service URL.
+# Example for Bark: "SUB_STORE_PUSH_SERVICE=https://api.day.app/XXXXXXXXXXXX/[Push Title]/[Push Content]"
+# Only replace XXXXXXXXXXXX with your token. [Push Title]/[Push Content] are replaced by sub-store.
 sub-store-push-service: ""
 
 
-# 覆写订阅的url，这个的作用是生成带指定规则的mihomo/clash.meta订阅链接
-# 防止网络不好，所以现在内置，依赖:8199端口
-# 如果你想替换其他的自定义覆写文件，自己命名后放在output目录，然后更改此URL后缀即可
+# Override subscription URL used to generate mihomo/clash.meta subscription links with rules.
+# This is now bundled to avoid network issues and depends on port :8199.
+# To use another custom override file, place it in the output directory and
+# change the suffix of this URL.
 mihomo-overwrite-url: "http://127.0.0.1:8199/sub/ACL4SSR_Online_Full.yaml"
 
-# 保存方法
-# 目前支持的保存方法: r2, local, gist, webdav, s3
+# Save method. Supported values: r2, local, gist, webdav, s3.
 save-method: local
 
 # webdav
@@ -186,46 +198,48 @@ github-token: ""
 # github api mirror
 github-api-mirror: ""
 
-# 将测速结果推送到Worker的地址
+# Worker URL for pushing speed-test results.
 worker-url: https://example.worker.dev
-# Worker令牌
+# Worker token.
 worker-token: 1234567890
 
-# 将测速结果推送到S3/Minio的地址
+# S3/Minio endpoint for pushing speed-test results.
 s3-endpoint: "127.0.0.1:9000"
-# S3的访问凭证
+# S3 access credentials.
 s3-access-id: "ak"
 s3-secret-key: "sk"
-# S3的Bucket名称
+# S3 bucket name.
 s3-bucket: "public"
-# 是否使用SSL
+# Whether to use SSL.
 s3-use-ssl: false
-# 默认自动判断dns还是path，但一些云厂商不遵循规范，所以有时需要手动设置
-# 可选值：auto, path, dns
+# Defaults to auto-detecting DNS-style or path-style bucket lookup. Some cloud
+# providers do not follow the standard, so manual setting is sometimes needed.
+# Options: auto, path, dns.
 s3-bucket-lookup: "auto"
 
-# 重试次数(获取订阅失败后重试次数)
+# Retry count after subscription fetch failure.
 sub-urls-retry: 3
-# 订阅下载并发数(控制同时拉取多少个订阅链接)
+# Subscription download concurrency. Controls how many subscription URLs are fetched at once.
 sub-urls-concurrent: 20
-# 获取订阅时使用的UA；如果设置random将会使用随机UA获取订阅
+# User-Agent for fetching subscriptions. Set to random to use a random UA.
 # sub-urls-get-ua: "random"
 sub-urls-get-ua: "clash.meta (https://github.com/beck-8/subs-check)"
-# Github Proxy，获取订阅使用，结尾要带的 /
+# GitHub proxy used for fetching subscriptions. Must end with /.
 # github-proxy: "https://ghfast.top/"
 github-proxy: ""
-# 此参数更通用，适用于拉取代理、消息推送、文件上传等等
-# 写法跟环境变量一样。修改需重启生效
+# General proxy for fetching proxies, sending messages, uploading files, and more.
+# Syntax matches environment variables. Restart required after changes.
 # proxy: "http://username:password@192.168.1.1:7890"
 # proxy: "socks5://username:password@192.168.1.1:7890"
 proxy: ""
-# 符合条件节点数量的占比，低于此值会将订阅链接打印出来，用于排查质量差的订阅
+# Required success-rate ratio. Subscriptions below this value are printed to help debug low-quality sources.
 success-rate: 0
 
-# DNS 配置，支持 udp/tcp/tls/https/quic 协议
-# enable=false 走 mihomo 默认（系统 DNS + 仅 IPv4）；ipv6=true 允许 v6 解析
-# enable=true 三字段可留空，按 proxy-server-nameserver→nameserver→default-nameserver 链回落
-# default-nameserver 用作 bootstrap 必须是纯 IP
+# DNS configuration. Supports udp/tcp/tls/https/quic.
+# enable=false uses mihomo defaults (system DNS + IPv4 only); ipv6=true allows IPv6 resolution.
+# When enable=true, the three fields can be empty and fall back in this chain:
+# proxy-server-nameserver -> nameserver -> default-nameserver.
+# default-nameserver is used for bootstrap and must contain plain IPs.
 dns:
   enable: false
   ipv6: false
@@ -237,32 +251,35 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
 
-# 远程订阅清单地址；用于集中维护多个订阅链接，避免频繁修改本地文件
-# 支持两种格式：
-# 1) 纯文本：按行分隔，支持 # 注释与空行
-# 2) YAML/JSON：字符串数组 ["https://...", "https://..."]
-# 支持时间占位符与 github-proxy，例如包含 {Ymd}、{Y-m-d}
+# Remote subscription list URLs. Use this to centrally maintain multiple
+# subscription links without frequently editing local files.
+# Supported formats:
+# 1) Plain text: one per line, with # comments and blank lines.
+# 2) YAML/JSON: string array ["https://...", "https://..."].
+# Supports time placeholders and github-proxy, for example {Ymd} and {Y-m-d}.
 sub-urls-remote:
   # - https://example.com/sub-list.txt
   # - https://example.com/sub-list.yaml
   - https://raw.githubusercontent.com/beck-8/sub-urls/refs/heads/main/%E5%B0%8F%E8%80%8C%E7%BE%8E.txt
 
-# 订阅地址 支持 clash/mihomo/v2ray/base64 格式的订阅链接
-# 如果用户想明确使用clash类型，那可以在支持的订阅链接结尾加上 &flag=clash.meta
-# github 链接可自己添加ghproxy使用；订阅链接支持 HTTP_PROXY HTTPS_PROXY 环境变量加速拉取
-# 如果用户想区分节点来源，可在订阅链接结尾加上 #备注 ，备注字段会自动加到节点命名结尾
+# Subscription URLs. Supports clash/mihomo/v2ray/base64 subscription links.
+# To explicitly use the clash type, append &flag=clash.meta to supported URLs.
+# Add ghproxy to GitHub links yourself if needed. HTTP_PROXY and HTTPS_PROXY are
+# supported for accelerating subscription fetches.
+# To distinguish node sources, append #remark to the subscription URL. The remark
+# is automatically added to the end of node names.
 sub-urls:
   # - https://example.com/sub.txt
   # - https://example.com/sub2.txt
   # - https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a
   # - https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a?flag=clash.meta
-    # 所有时间占位符均支持 ±N 天偏移，例如 {Ymd-1} 表示昨天、{Y-m-d+1} 表示明天
+    # All time placeholders support ±N day offsets, such as {Ymd-1} for yesterday and {Y-m-d+1} for tomorrow.
   # - https://raw.githubusercontent.com/example/repo/main/config/{Ymd}.yaml
   # - https://raw.githubusercontent.com/example/repo/main/daily/daily-{Y}-{m}-{d}.yaml
   # - https://raw.githubusercontent.com/example/repo/main/config/{Ymd-1}.yaml
   # - https://raw.githubusercontent.com/example/repo/main/daily/daily-{Y-m-d+1}.yaml
-  # - https://example.com/sub.txt#我是备注我是备注
-  # 打开这个就可以把上次可用的节点再次测一次
+  # - https://example.com/sub.txt#my-remark
+  # Enable this to test previously usable nodes again.
   # - "http://127.0.0.1:8199/sub/all.yaml"
   - "https://raw.githubusercontent.com/firefoxmmx2/v2rayshare_subcription/main/subscription/clash_sub.yaml"
   - "https://raw.githubusercontent.com/Q3dlaXpoaQ/V2rayN_Clash_Node_Getter/refs/heads/main/APIs/sc0.yaml"

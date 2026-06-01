@@ -13,32 +13,32 @@ import (
 	"github.com/beck-8/subs-check/config"
 )
 
-// NotifyRequest 定义发送通知的请求结构
+// NotifyRequest defines the notification request body.
 type NotifyRequest struct {
-	URLs  string `json:"urls"`  // 通知目标的 URL（如 mailto://、discord://）
-	Body  string `json:"body"`  // 通知内容
-	Title string `json:"title"` // 通知标题（可选）
+	URLs  string `json:"urls"`  // Notification target URL, such as mailto:// or discord://.
+	Body  string `json:"body"`  // Notification body.
+	Title string `json:"title"` // Notification title (optional).
 }
 
-// Notify 发送通知
+// Notify sends a notification.
 func Notify(request NotifyRequest) error {
-	// 构建请求体
+	// Build request body.
 	body, err := json.Marshal(request)
 	if err != nil {
-		return fmt.Errorf("构建请求体失败: %w", err)
+		return fmt.Errorf("failed to build request body: %w", err)
 	}
 
-	// 发送请求
+	// Send request.
 	resp, err := http.Post(config.GlobalConfig.AppriseApiServer, "application/json", bytes.NewBuffer(body))
 	if err != nil {
-		return fmt.Errorf("发送请求失败: %w", err)
+		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// 检查响应状态码
+	// Check response status code.
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("通知失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("notification failed, status code: %d, response: %s", resp.StatusCode, string(body))
 	}
 
 	return nil
@@ -48,14 +48,14 @@ func SendNotify(length int) {
 	if config.GlobalConfig.AppriseApiServer == "" {
 		return
 	} else if len(config.GlobalConfig.RecipientUrl) == 0 {
-		slog.Error("没有配置通知目标")
+		slog.Error("No notification targets configured")
 		return
 	}
 
 	for _, url := range config.GlobalConfig.RecipientUrl {
 		request := NotifyRequest{
 			URLs: url,
-			Body: fmt.Sprintf("✅ 可用节点：%d\n🕒 %s",
+			Body: fmt.Sprintf("✅ Usable nodes: %d\n🕒 %s",
 				length,
 				GetCurrentTime()),
 			Title: config.GlobalConfig.NotifyTitle,
@@ -64,12 +64,12 @@ func SendNotify(length int) {
 		for i := 0; i < config.GlobalConfig.SubUrlsReTry; i++ {
 			err = Notify(request)
 			if err == nil {
-				slog.Info(fmt.Sprintf("%s 通知发送成功", strings.SplitN(url, "://", 2)[0]))
+				slog.Info(fmt.Sprintf("%s notification sent successfully", strings.SplitN(url, "://", 2)[0]))
 				break
 			}
 		}
 		if err != nil {
-			slog.Error(fmt.Sprintf("%s 发送通知失败: %v", strings.SplitN(url, "://", 2)[0], err))
+			slog.Error(fmt.Sprintf("%s notification failed: %v", strings.SplitN(url, "://", 2)[0], err))
 		}
 	}
 }

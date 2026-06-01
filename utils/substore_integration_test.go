@@ -1,11 +1,13 @@
 //go:build substore_it
 
-// 真实启动一个临时 sub-store(独立端口 + 独立数据目录),对 substore.go 的增删改查做端到端测试。
-// 默认 go test 不会跑,需要显式带 tag:
+// Starts a real temporary sub-store on an isolated port and data directory, then
+// runs end-to-end CRUD tests for substore.go.
+// Default go test runs skip this; pass the tag explicitly:
 //
 //	go test -tags substore_it ./utils/ -run TestSubStore -v
 //
-// 依赖当前平台已嵌入的 node 二进制(assets.EmbeddedNode),与正式运行用的是同一份。
+// Depends on the embedded node binary for the current platform, the same asset
+// used in production.
 package utils
 
 import (
@@ -27,8 +29,8 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// 不能 import assets 包(会形成 assets -> save/method -> utils 的 import cycle),
-// 所以直接读 ../assets 下的 .zst 资源文件,和正式运行用的是同一份。
+// Do not import the assets package because it creates an assets -> save/method
+// -> utils import cycle. Read the .zst assets under ../assets directly instead.
 func assetsDir() string {
 	_, thisFile, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(thisFile), "..", "assets")
@@ -47,8 +49,9 @@ func nodeAssetName() string {
 
 const overwriteMarker = overwriteOpMarker
 
-// startTempSubStore 在临时目录里解压并启动一个 sub-store,返回它的 BaseURL。
-// 数据写到独立的 SUB_STORE_DATA_BASE_PATH,不会碰用户的真实数据。
+// startTempSubStore extracts and starts a sub-store in a temp directory and
+// returns its BaseURL. Data is written to an isolated SUB_STORE_DATA_BASE_PATH,
+// never to the user's real data.
 func startTempSubStore(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -60,7 +63,7 @@ func startTempSubStore(t *testing.T) string {
 	ad := assetsDir()
 	nodeSrc := filepath.Join(ad, nodeAssetName())
 	if _, err := os.Stat(nodeSrc); err != nil {
-		t.Skipf("当前平台没有内嵌 node 资源 (%s),跳过集成测试", nodeSrc)
+		t.Skipf("current platform has no embedded node asset (%s); skipping integration test", nodeSrc)
 	}
 	nodePath := filepath.Join(dir, nodeName)
 	jsPath := filepath.Join(dir, "sub-store.bundle.js")
@@ -81,9 +84,9 @@ func startTempSubStore(t *testing.T) string {
 	cmd.Stderr = logFile
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("启动 sub-store 失败: %v", err)
+		t.Fatalf("failed to start sub-store: %v", err)
 	}
-	t.Logf("临时 sub-store 已启动: pid=%d 端口=%s 运行目录=%s", cmd.Process.Pid, port, dir)
+	t.Logf("temporary sub-store started: pid=%d port=%s working-dir=%s", cmd.Process.Pid, port, dir)
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
@@ -144,10 +147,10 @@ func waitReady(t *testing.T, base string) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	t.Fatal("sub-store 在超时内未就绪")
+	t.Fatal("sub-store did not become ready before timeout")
 }
 
-// patchRaw 直接发一个 PATCH,用于在测试里模拟"用户在 UI 里改了配置"。
+// patchRaw sends a raw PATCH to simulate a user editing config in the UI.
 func patchRaw(t *testing.T, url string, body any) {
 	t.Helper()
 	b, _ := json.Marshal(body)
@@ -159,11 +162,11 @@ func patchRaw(t *testing.T, url string, body any) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("patch %s 状态码 %d", url, resp.StatusCode)
+		t.Fatalf("patch %s status code %d", url, resp.StatusCode)
 	}
 }
 
-// getProcess 拉取 sub 或 file 的 process 和 content。
+// getProcess fetches process and content for a sub or file.
 func getProcess(t *testing.T, url string) ([]map[string]any, string) {
 	t.Helper()
 	resp, err := http.Get(url)
@@ -180,7 +183,7 @@ func getProcess(t *testing.T, url string) ([]map[string]any, string) {
 		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(body, &r); err != nil {
-		t.Fatalf("解析 %s 失败: %v\n%s", url, err, string(body))
+		t.Fatalf("failed to parse %s: %v\n%s", url, err, string(body))
 	}
 	if r.Status != "success" {
 		t.Fatalf("get %s status=%s", url, r.Status)
@@ -200,100 +203,100 @@ func hasOperatorType(process []map[string]any, typ string) bool {
 func TestSubStoreCRUD(t *testing.T) {
 	base := startTempSubStore(t)
 
-	// substore.go 里的函数读全局,测试里设置好
+	// Functions in substore.go read globals, so set them up for the test.
 	BaseURL = base
 	config.GlobalConfig.GithubProxy = ""
 	config.GlobalConfig.MihomoOverwriteUrl = "http://127.0.0.1:9/strategy-v1.yaml"
 	mihomoOverwriteUrl = ""
 
-	// ---- sub: 创建 ----
+	// ---- sub: create ----
 	if err := checkSub(); err == nil {
-		t.Fatal("sub 尚未创建,checkSub 应该失败")
+		t.Fatal("sub has not been created; checkSub should fail")
 	}
 	if err := createSub([]byte("proxies:\n  - {name: a}\n")); err != nil {
 		t.Fatalf("createSub: %v", err)
 	}
 	if err := checkSub(); err != nil {
-		t.Fatalf("创建后 checkSub 应成功: %v", err)
+		t.Fatalf("checkSub should succeed after create: %v", err)
 	}
 
-	// 模拟用户给 sub 加了一个 Sort Operator
+	// Simulate a user adding a Sort Operator to sub.
 	subURL := base + "/api/sub/" + SubName
 	patchRaw(t, subURL, map[string]any{
 		"process": []map[string]any{
 			{"type": "Quick Setting Operator"},
-			{"type": "Sort Operator", "args": "asc", "customName": "我的排序"},
+			{"type": "Sort Operator", "args": "asc", "customName": "my sort"},
 		},
 	})
 
-	// ---- sub: 更新(只发 content),用户的 Sort Operator 必须保留 ----
+	// ---- sub: update content only; the user's Sort Operator must be preserved ----
 	if err := updateSub([]byte("proxies:\n  - {name: b}\n  - {name: c}\n")); err != nil {
 		t.Fatalf("updateSub: %v", err)
 	}
 	proc, content := getProcess(t, subURL)
 	if !hasOperatorType(proc, "Sort Operator") {
-		t.Errorf("updateSub 不应覆盖用户的 Sort Operator,实际 process=%v", proc)
+		t.Errorf("updateSub should not overwrite the user's Sort Operator, process=%v", proc)
 	}
 	if !bytes.Contains([]byte(content), []byte("name: b")) {
-		t.Errorf("updateSub 后 content 未刷新: %q", content)
+		t.Errorf("content was not refreshed after updateSub: %q", content)
 	}
 
-	// ---- file: 创建,我们的算子应带标记 ----
+	// ---- file: create; our operator should be marked ----
 	if err := checkfile(); err == nil {
-		t.Fatal("file 尚未创建,checkfile 应该失败")
+		t.Fatal("file has not been created; checkfile should fail")
 	}
 	if err := createfile(); err != nil {
 		t.Fatalf("createfile: %v", err)
 	}
 	if err := checkfile(); err != nil {
-		t.Fatalf("创建后 checkfile 应成功: %v", err)
+		t.Fatalf("checkfile should succeed after create: %v", err)
 	}
 	fileURL := base + "/api/file/" + MihomoName
 	proc, _ = getProcess(t, base+"/api/wholeFile/"+MihomoName)
 	if !markerPresent(proc) {
-		t.Fatalf("createfile 后应有 customName 标记,实际 process=%v", proc)
+		t.Fatalf("createfile should add the customName marker, process=%v", proc)
 	}
 
-	// 模拟用户在 file 里又加了一个自己的算子
+	// Simulate a user adding another operator to file.
 	ourArgs := map[string]any{"content": WarpUrl(config.GlobalConfig.MihomoOverwriteUrl), "mode": "link"}
 	patchRaw(t, fileURL, map[string]any{
 		"process": []map[string]any{
-			{"type": "Sort Operator", "args": "desc", "customName": "用户排序"},
+			{"type": "Sort Operator", "args": "desc", "customName": "user sort"},
 			{"type": "Script Operator", "args": ourArgs, "customName": overwriteMarker},
 		},
 	})
 
-	// ---- file: 更新覆写 URL,只动我们带标记的算子,用户算子保留 ----
+	// ---- file: update override URL; only our marked operator changes ----
 	config.GlobalConfig.MihomoOverwriteUrl = "http://127.0.0.1:9/strategy-v2.yaml"
 	if err := updatefile(); err != nil {
 		t.Fatalf("updatefile: %v", err)
 	}
 	proc, _ = getProcess(t, base+"/api/wholeFile/"+MihomoName)
 	if !hasOperatorType(proc, "Sort Operator") {
-		t.Errorf("updatefile 不应删除用户的 Sort Operator,实际 process=%v", proc)
+		t.Errorf("updatefile should not delete the user's Sort Operator, process=%v", proc)
 	}
 	want := WarpUrl("http://127.0.0.1:9/strategy-v2.yaml")
 	if got := markerContent(proc); got != want {
-		t.Errorf("我们算子的 content 应更新为 %q,实际 %q", want, got)
+		t.Errorf("our operator content should be updated to %q, got %q", want, got)
 	}
 	if c := userScriptContent(proc); c != "" {
-		t.Errorf("用户算子被误改了? 不应有变化,实际 userScript content=%q", c)
+		t.Errorf("user operator was changed unexpectedly; userScript content=%q", c)
 	}
 
-	// ---- file: 幂等性——URL 没变时再次 updatefile 不应改动任何东西 ----
+	// ---- file: idempotency; updatefile should change nothing when URL is unchanged ----
 	before, _ := getProcess(t, base+"/api/wholeFile/"+MihomoName)
 	if err := updatefile(); err != nil {
-		t.Fatalf("第二次 updatefile: %v", err)
+		t.Fatalf("second updatefile: %v", err)
 	}
 	after, _ := getProcess(t, base+"/api/wholeFile/"+MihomoName)
 	if len(after) != len(before) {
-		t.Errorf("幂等更新不应改变算子数量: before=%d after=%d", len(before), len(after))
+		t.Errorf("idempotent update should not change operator count: before=%d after=%d", len(before), len(after))
 	}
 	if markerContent(after) != want {
-		t.Errorf("幂等更新不应改变 content: %q", markerContent(after))
+		t.Errorf("idempotent update should not change content: %q", markerContent(after))
 	}
 	if n := countMarker(after); n != 1 {
-		t.Errorf("幂等更新不应重复插入带标记的算子,实际个数=%d", n)
+		t.Errorf("idempotent update should not insert duplicate marked operators, count=%d", n)
 	}
 }
 
@@ -307,19 +310,20 @@ func countMarker(process []map[string]any) int {
 	return n
 }
 
-// TestSubStoreLegacyFileMigration 验证老数据(无标记)首次更新会被识别并补上标记。
+// TestSubStoreLegacyFileMigration verifies that old unmarked data is detected
+// and marked on first update.
 func TestSubStoreLegacyFileMigration(t *testing.T) {
 	base := startTempSubStore(t)
 	BaseURL = base
 	config.GlobalConfig.GithubProxy = ""
 	config.GlobalConfig.MihomoOverwriteUrl = "http://127.0.0.1:9/old.yaml"
 
-	// 创建 sub(file 的 source 引用它)
+	// Create sub, which file references as its source.
 	if err := createSub([]byte("proxies: []\n")); err != nil {
 		t.Fatalf("createSub: %v", err)
 	}
 
-	// 直接 POST 一个"老格式" file:link 模式的 Script Operator,但没有 customName 标记
+	// Directly POST an old-format file:link Script Operator without a customName marker.
 	legacy := map[string]any{
 		"name": MihomoName,
 		"process": []map[string]any{
@@ -337,17 +341,17 @@ func TestSubStoreLegacyFileMigration(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// 更新:应按 type+mode 命中老算子,改 content 的同时补上标记
+	// Update: match the old operator by type+mode, change content, and add marker.
 	config.GlobalConfig.MihomoOverwriteUrl = "http://127.0.0.1:9/new.yaml"
 	if err := updatefile(); err != nil {
 		t.Fatalf("updatefile: %v", err)
 	}
 	proc, _ := getProcess(t, base+"/api/wholeFile/"+MihomoName)
 	if !markerPresent(proc) {
-		t.Errorf("老数据更新后应补上标记,实际 process=%v", proc)
+		t.Errorf("legacy data should be marked after update, process=%v", proc)
 	}
 	if got, want := markerContent(proc), WarpUrl("http://127.0.0.1:9/new.yaml"); got != want {
-		t.Errorf("content 应更新为 %q,实际 %q", want, got)
+		t.Errorf("content should be updated to %q, got %q", want, got)
 	}
 }
 
@@ -374,7 +378,7 @@ func markerContent(process []map[string]any) string {
 	return ""
 }
 
-// userScriptContent 返回非标记的 Script Operator 的 content(测试里期望它不变)。
+// userScriptContent returns the content of an unmarked Script Operator, which tests expect to stay unchanged.
 func userScriptContent(process []map[string]any) string {
 	for _, op := range process {
 		if op["type"] != "Script Operator" || op["customName"] == overwriteMarker {

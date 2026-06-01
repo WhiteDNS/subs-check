@@ -18,12 +18,13 @@ type geoResult struct {
 	ip  string
 }
 
-// 这里需要一个不限流的ipv4的非CF的API
-// 因为ipv6在数据库中没有记载时会变成US。
-// 不能用CF的API是因为我们要保留CF的节点（无proxyip的）
-// GetProxyCountry 并行请求所有 IP 查询端点，按优先级返回最优结果
+// This needs a non-CF IPv4 API without strict rate limits because IPv6 entries
+// missing from the database may fall back to US. CF APIs cannot be the only
+// source because CF nodes without proxyip must still be kept.
+// GetProxyCountry queries all IP lookup endpoints in parallel and returns the
+// best result by priority.
 func GetProxyCountry(httpClient *http.Client) (loc string, ip string) {
-	// 顺序代表优先级，索引越小质量越高
+	// Order represents priority; lower index means higher quality.
 	checkers := []func(*http.Client) (string, string){
 		GetMe, GetIpinfo, GetCFProxy, GetEdgeOneProxy,
 	}
@@ -42,7 +43,7 @@ func GetProxyCountry(httpClient *http.Client) (loc string, ip string) {
 
 	wg.Wait()
 
-	// 按优先级返回第一个成功的结果
+	// Return the first successful result by priority.
 	for _, res := range results {
 		if res.loc != "" && res.ip != "" {
 			return res.loc, res.ip
@@ -51,7 +52,7 @@ func GetProxyCountry(httpClient *http.Client) (loc string, ip string) {
 	return
 }
 
-// GetEdgeOneProxy 通过腾讯 EdgeOne 获取地理位置
+// GetEdgeOneProxy gets geolocation through Tencent EdgeOne.
 func GetEdgeOneProxy(httpClient *http.Client) (loc string, ip string) {
 	type GeoResponse struct {
 		Eo struct {
@@ -65,63 +66,64 @@ func GetEdgeOneProxy(httpClient *http.Client) (loc string, ip string) {
 	url := "https://functions-geolocation.edgeone.app/geo"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
+		slog.Debug(fmt.Sprintf("Failed to create request: %s", err))
 		return
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("edgeone获取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("edgeone failed to get node location: %s", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug(fmt.Sprintf("edgeone返回非200状态码: %v", resp.StatusCode))
+		slog.Debug(fmt.Sprintf("edgeone returned non-200 status code: %v", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("edgeone读取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("edgeone failed to read node location: %s", err))
 		return
 	}
 
 	var eo GeoResponse
 	err = json.Unmarshal(body, &eo)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("解析edgeone JSON 失败: %v", err))
+		slog.Debug(fmt.Sprintf("Failed to parse edgeone JSON: %v", err))
 		return
 	}
 
 	return eo.Eo.Geo.CountryCodeAlpha2, eo.Eo.ClientIp
 }
 
-// GetCFProxy 通过 Cloudflare cdn-cgi/trace 获取地理位置
-// 局限：CF 节点需要 proxyip 落地才能访问套 CF 的网站，trace 返回的是 proxyip 落地位置而非节点真实出口位置
+// GetCFProxy gets geolocation through Cloudflare cdn-cgi/trace.
+// Limitation: CF nodes need proxyip egress to access CF-protected sites, so
+// trace returns the proxyip egress location, not the node's real exit location.
 func GetCFProxy(httpClient *http.Client) (loc string, ip string) {
 	url := "https://www.cloudflare.com/cdn-cgi/trace"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
+		slog.Debug(fmt.Sprintf("Failed to create request: %s", err))
 		return
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("cf获取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("cf failed to get node location: %s", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug(fmt.Sprintf("cf返回非200状态码: %v", resp.StatusCode))
+		slog.Debug(fmt.Sprintf("cf returned non-200 status code: %v", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("cf读取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("cf failed to read node location: %s", err))
 		return
 	}
 
@@ -137,7 +139,7 @@ func GetCFProxy(httpClient *http.Client) (loc string, ip string) {
 	return
 }
 
-// GetIPSB 通过 ip.sb 获取地理位置
+// GetIPSB gets geolocation through ip.sb.
 func GetIPSB(httpClient *http.Client) (loc string, ip string) {
 	type GeoIPData struct {
 		IP      string `json:"ip"`
@@ -147,32 +149,32 @@ func GetIPSB(httpClient *http.Client) (loc string, ip string) {
 	url := "https://api.ip.sb/geoip"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
+		slog.Debug(fmt.Sprintf("Failed to create request: %s", err))
 		return
 	}
 	req.Header.Set("User-Agent", convert.RandUserAgent())
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("ip.sb获取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("ip.sb failed to get node location: %s", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug(fmt.Sprintf("ip.sb返回非200状态码: %v", resp.StatusCode))
+		slog.Debug(fmt.Sprintf("ip.sb returned non-200 status code: %v", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("ip.sb读取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("ip.sb failed to read node location: %s", err))
 		return
 	}
 
 	var geo GeoIPData
 	err = json.Unmarshal(body, &geo)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("解析ip.sb JSON 失败: %v", err))
+		slog.Debug(fmt.Sprintf("Failed to parse ip.sb JSON: %v", err))
 		return
 	}
 
@@ -188,32 +190,32 @@ func GetMe(httpClient *http.Client) (loc string, ip string) {
 	url := "https://ip.122911.xyz/api/ipinfo"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
+		slog.Debug(fmt.Sprintf("Failed to create request: %s", err))
 		return
 	}
 	req.Header.Set("User-Agent", "subs-check (https://github.com/beck-8/subs-check)")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("me获取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("me failed to get node location: %s", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug(fmt.Sprintf("me返回非200状态码: %v", resp.StatusCode))
+		slog.Debug(fmt.Sprintf("me returned non-200 status code: %v", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("me读取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("me failed to read node location: %s", err))
 		return
 	}
 
 	var geo GeoIPData
 	err = json.Unmarshal(body, &geo)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("解析me JSON 失败: %v", err))
+		slog.Debug(fmt.Sprintf("Failed to parse me JSON: %v", err))
 		return
 	}
 
@@ -231,32 +233,32 @@ func GetIpinfo(httpClient *http.Client) (loc string, ip string) {
 		111, 107, 101, 110, 61, 48, 57, 48, 102, 54, 54, 55, 55, 57, 55, 51, 51, 98, 102})
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("创建请求失败: %s", err))
+		slog.Debug(fmt.Sprintf("Failed to create request: %s", err))
 		return
 	}
 	req.Header.Set("User-Agent", "subs-check (https://github.com/beck-8/subs-check)")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("Ipinfo获取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("Ipinfo failed to get node location: %s", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Debug(fmt.Sprintf("Ipinfo返回非200状态码: %v", resp.StatusCode))
+		slog.Debug(fmt.Sprintf("Ipinfo returned non-200 status code: %v", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("Ipinfo读取节点位置失败: %s", err))
+		slog.Debug(fmt.Sprintf("Ipinfo failed to read node location: %s", err))
 		return
 	}
 
 	var geo GeoIPData
 	err = json.Unmarshal(body, &geo)
 	if err != nil {
-		slog.Debug(fmt.Sprintf("解析Ipinfo JSON 失败: %v", err))
+		slog.Debug(fmt.Sprintf("Failed to parse Ipinfo JSON: %v", err))
 		return
 	}
 

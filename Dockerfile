@@ -9,7 +9,7 @@ RUN apk add --no-cache nodejs zstd && \
         "x86_64") zstd -f /usr/bin/node -o assets/node_linux_amd64.zst ;; \
         "aarch64") zstd -f /usr/bin/node -o assets/node_linux_arm64.zst ;; \
         "armv7l") zstd -f /usr/bin/node -o assets/node_linux_armv7.zst ;; \
-        *) echo "不支持的架构: $ARCH" && exit 1 ;; \
+        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
     esac
 RUN echo "Building commit: ${GITHUB_SHA:0:7}" && \
     go mod tidy && \

@@ -13,16 +13,16 @@ import (
 // the program itself keeps running. SIGINT/SIGTERM are not handled
 // here to avoid propagating to child processes.
 func SetupSignalHandler(onCancel func()) {
-	slog.Debug("设置信号处理器")
+	slog.Debug("Setting up signal handlers")
 
 	hubSigChan := make(chan os.Signal, 1)
 	signal.Notify(hubSigChan, syscall.SIGHUP)
 
 	go func() {
 		for sig := range hubSigChan {
-			slog.Debug(fmt.Sprintf("收到 HUB 信号: %s", sig))
+			slog.Debug(fmt.Sprintf("Received HUB signal: %s", sig))
 			onCancel()
-			slog.Debug("HUB 模式: 已请求取消当前任务，程序继续运行")
+			slog.Debug("HUB mode: requested cancellation of the current task; process continues")
 		}
 	}()
 }

@@ -12,29 +12,29 @@ import (
 	"github.com/beck-8/subs-check/config"
 )
 
-// ExecuteCallback 执行回调脚本
+// ExecuteCallback runs the callback script.
 func ExecuteCallback(successCount int) {
 	callbackScript := config.GlobalConfig.CallbackScript
 	if callbackScript == "" {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("执行回调脚本: %s", callbackScript))
+	slog.Info(fmt.Sprintf("Executing callback script: %s", callbackScript))
 
-	// 检查脚本文件是否存在
+	// Check whether the script file exists.
 	if _, err := os.Stat(callbackScript); os.IsNotExist(err) {
-		slog.Error(fmt.Sprintf("回调脚本不存在: %s", callbackScript))
+		slog.Error(fmt.Sprintf("Callback script does not exist: %s", callbackScript))
 		return
 	}
 
-	// 在非Windows系统上检查并设置执行权限
+	// On non-Windows systems, check and set execute permissions.
 	if runtime.GOOS != "windows" {
-		err := os.Chmod(callbackScript, 0755) // rwxr-xr-x 权限
+		err := os.Chmod(callbackScript, 0755) // rwxr-xr-x permissions.
 		if err != nil {
-			slog.Warn(fmt.Sprintf("设置脚本执行权限失败: %v", err))
+			slog.Warn(fmt.Sprintf("Failed to set script execute permissions: %v", err))
 		}
 
-		// 检查脚本是否有shebang
+		// Check whether the script has a shebang.
 		content, err := os.ReadFile(callbackScript)
 		if err == nil && len(content) > 0 {
 			hasShebang := false
@@ -43,51 +43,51 @@ func ExecuteCallback(successCount int) {
 			}
 
 			if !hasShebang {
-				slog.Warn("脚本缺少shebang行，请在脚本开头添加对应的：#!/bin/bash、#!/bin/sh、#!/usr/bin/env bash 等")
+				slog.Warn("Script is missing a shebang line; add one at the beginning, such as #!/bin/bash, #!/bin/sh, or #!/usr/bin/env bash")
 			}
 		}
 	}
 
-	// 根据操作系统类型选择不同的执行方式
+	// Choose an execution method based on the operating system.
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		// Windows 系统
+		// Windows.
 		if strings.HasSuffix(strings.ToLower(callbackScript), ".bat") ||
 			strings.HasSuffix(strings.ToLower(callbackScript), ".cmd") {
-			// 使用完整路径，并正确处理带空格的路径
+			// Use the full path and handle paths with spaces correctly.
 			absPath, err := filepath.Abs(callbackScript)
 			if err != nil {
-				slog.Error(fmt.Sprintf("获取脚本绝对路径失败: %v", err))
+				slog.Error(fmt.Sprintf("Failed to get absolute script path: %v", err))
 				return
 			}
 			cmd = exec.Command("cmd", "/C", absPath)
 		} else if strings.HasSuffix(strings.ToLower(callbackScript), ".ps1") {
-			// PowerShell 脚本
+			// PowerShell script.
 			absPath, err := filepath.Abs(callbackScript)
 			if err != nil {
-				slog.Error(fmt.Sprintf("获取脚本绝对路径失败: %v", err))
+				slog.Error(fmt.Sprintf("Failed to get absolute script path: %v", err))
 				return
 			}
-			// 使用 -ExecutionPolicy Bypass 绕过执行策略限制
+			// Use -ExecutionPolicy Bypass to bypass execution policy restrictions.
 			cmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", absPath)
 		} else {
 			cmd = exec.Command(callbackScript)
 		}
-		// 设置工作目录为脚本所在目录
+		// Set the working directory to the script directory.
 		cmd.Dir = filepath.Dir(callbackScript)
 	} else {
-		// Unix/Linux/MacOS 系统
+		// Unix/Linux/macOS.
 		cmd = exec.Command(callbackScript)
 	}
 
-	// 设置环境变量，传递成功节点数量
+	// Set environment variables and pass the successful node count.
 	cmd.Env = append(os.Environ(), fmt.Sprintf("SUCCESS_COUNT=%d", successCount))
 
-	// 执行命令
+	// Execute command.
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		slog.Error(fmt.Sprintf("执行回调脚本失败: %v, 输出: %s", err, string(output)))
+		slog.Error(fmt.Sprintf("Callback script failed: %v, output: %s", err, string(output)))
 		return
 	}
-	slog.Info("回调脚本执行成功")
+	slog.Info("Callback script completed successfully")
 }

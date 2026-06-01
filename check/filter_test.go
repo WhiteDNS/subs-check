@@ -24,26 +24,26 @@ func TestFilterResults_NoFilter_PassesAll(t *testing.T) {
 }
 
 func TestFilterResults_MatchByOriginalName(t *testing.T) {
-	// 关闭 rename,filter 按原名里的关键字匹配
+	// With rename disabled, filter matches keywords in the original name.
 	withConfig(t, config.Config{
 		RenameNode: false,
-		Filter:     []string{"香港|HK"},
+		Filter:     []string{"Hong Kong|HK"},
 		Platforms:  []string{},
 	}, func() {
 		results := []Result{
-			{Proxy: map[string]any{"name": "🇭🇰香港01"}},
-			{Proxy: map[string]any{"name": "🇺🇸美国01"}},
+			{Proxy: map[string]any{"name": "🇭🇰Hong Kong 01"}},
+			{Proxy: map[string]any{"name": "🇺🇸United States 01"}},
 			{Proxy: map[string]any{"name": "HK-singapore-mix"}},
 		}
 		got := FilterResults(results)
 		if len(got) != 2 {
-			t.Fatalf("expected 2 matches (HK and 香港), got %d", len(got))
+			t.Fatalf("expected 2 matches (HK and Hong Kong), got %d", len(got))
 		}
 	})
 }
 
 func TestFilterResults_MatchByMediaTag(t *testing.T) {
-	// 不靠原名,靠 Phase 2 产出的 Netflix 标签匹配
+	// Match by the Netflix tag produced by Phase 2 instead of by the original name.
 	withConfig(t, config.Config{
 		RenameNode: false,
 		Filter:     []string{`NF-US`},
@@ -73,7 +73,7 @@ func TestFilterResults_MatchByMediaTag(t *testing.T) {
 }
 
 func TestFilterResults_DoesNotMutateName(t *testing.T) {
-	// filter 调 RenderName 只是临时算字符串,不能修改 proxy["name"]
+	// filter calls RenderName only to calculate a temporary string; it must not mutate proxy["name"].
 	withConfig(t, config.Config{
 		RenameNode: false,
 		Filter:     []string{"NF"},

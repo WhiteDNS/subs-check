@@ -2,29 +2,34 @@ package check
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/beck-8/subs-check/config"
 	proxyutils "github.com/beck-8/subs-check/proxy"
 )
 
-// RenderName 根据 Result 的结构化字段构造展示名。
+// RenderName builds the display name from Result's structured fields.
 //
-// 这是整个项目唯一的"节点名生成"出口,纯函数:
-//   - 无 I/O,无 goroutine
-//   - 不读写 proxy map 的 name 字段,不修改 Result
-//   - 仅依赖传入的 Result 和 config.GlobalConfig
+// This is the only node-name generation entry point in the project.
+// It does not read/write the proxy map's name field and does not modify Result.
 //
-// includeSpeed 为 true 时追加速度标签,只在最终输出 all.yaml 时用。
-// filter 阶段应该传 false,因为此时尚未测速。
+// includeSpeed appends a speed tag when true and is only used for the final all.yaml output.
+// The filter stage should pass false because speed testing has not run yet.
 func RenderName(r Result, includeSpeed bool) string {
-	// 1. base 名字
-	// RenameNode 是"强覆盖合约":只要开了就用 Rename(Country) 的结果覆盖原名,
-	// Country 为空时 Rename 会走 ❓Other_N 的兜底。
-	// 这样能确保上游订阅里已有的 |speed|media 尾缀不会透传进来再被叠加,
-	// 否则在 IP 查询失败(免费节点常见)的节点上会出现重复标签。
+	// 1. Base name. A node-name template is a hard override. Otherwise,
+	// RenameNode replaces the original name with the built-in country/index
+	// format. If Country is empty, Rename falls back to ❓Other_N. This prevents
+	// upstream |speed|media suffixes from leaking into the final name and being
+	// appended again, which is common when IP lookup fails on free nodes.
+	template := strings.TrimSpace(config.GlobalConfig.NodeNameTemplate)
+	templateHasSpeed := strings.Contains(template, "{Speed}")
+	templateHasTags := strings.Contains(template, "{Tags}")
+
 	var base string
-	if config.GlobalConfig.RenameNode {
+	if template != "" {
+		base = renderNameTemplate(template, r, includeSpeed)
+	} else if config.GlobalConfig.RenameNode {
 		base = config.GlobalConfig.NodePrefix + proxyutils.Rename(r.Country)
 	} else if r.Proxy != nil {
 		if n, ok := r.Proxy["name"].(string); ok {
@@ -32,21 +37,24 @@ func RenderName(r Result, includeSpeed bool) string {
 		}
 	}
 
-	// 2. 速度标签(仅 includeSpeed 且有速度时追加,放在媒体标签之前以保持与旧版相同的展示顺序)
+	// 2. Speed tag. Append only when includeSpeed is true and speed is present,
+	// before media tags to preserve the old display order.
 	var tags []string
-	if includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
+	if !templateHasSpeed && !templateHasTags && includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
 		tags = append(tags, formatSpeedTag(r.Speed))
 	}
 
-	// 3. 按 config.Platforms 顺序收集媒体标签
-	for _, plat := range config.GlobalConfig.Platforms {
-		if tag := mediaTagFor(plat, &r); tag != "" {
-			tags = append(tags, tag)
+	// 3. Collect media tags in config.Platforms order.
+	if !templateHasTags {
+		for _, plat := range config.GlobalConfig.Platforms {
+			if tag := mediaTagFor(plat, &r); tag != "" {
+				tags = append(tags, tag)
+			}
 		}
 	}
 
-	// 4. sub_tag 追加到最后
-	if r.Proxy != nil {
+	// 4. Append sub_tag last.
+	if !templateHasTags && r.Proxy != nil {
 		if t, ok := r.Proxy["sub_tag"].(string); ok && t != "" {
 			tags = append(tags, t)
 		}
@@ -58,8 +66,57 @@ func RenderName(r Result, includeSpeed bool) string {
 	return base + "|" + strings.Join(tags, "|")
 }
 
-// mediaTagFor 返回单个平台的展示标签,未命中返回空字符串。
-// 新增平台时只需在这里加一个 case 和对应的 Result 字段。
+func renderNameTemplate(template string, r Result, includeSpeed bool) string {
+	rename := proxyutils.NextRenameParts(r.Country)
+	replacer := strings.NewReplacer(
+		"{Flag}", rename.CountryFlag,
+		"{CountryFlag}", rename.CountryFlag,
+		"{Country}", rename.Country,
+		"{Index}", strconv.Itoa(rename.Index),
+		"{ShortID}", rename.ShortID,
+		"{ActualName}", originalName(r),
+		"{Name}", originalName(r),
+		"{Speed}", speedTag(r, includeSpeed),
+		"{Tags}", strings.Join(allTags(r, includeSpeed), "|"),
+	)
+	return strings.TrimSpace(replacer.Replace(template))
+}
+
+func originalName(r Result) string {
+	if r.Proxy == nil {
+		return ""
+	}
+	name, _ := r.Proxy["name"].(string)
+	return strings.TrimSpace(name)
+}
+
+func speedTag(r Result, includeSpeed bool) string {
+	if includeSpeed && config.GlobalConfig.SpeedTestUrl != "" && r.Speed > 0 {
+		return formatSpeedTag(r.Speed)
+	}
+	return ""
+}
+
+func allTags(r Result, includeSpeed bool) []string {
+	var tags []string
+	if tag := speedTag(r, includeSpeed); tag != "" {
+		tags = append(tags, tag)
+	}
+	for _, plat := range config.GlobalConfig.Platforms {
+		if tag := mediaTagFor(plat, &r); tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	if r.Proxy != nil {
+		if t, ok := r.Proxy["sub_tag"].(string); ok && t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
+// mediaTagFor returns the display tag for one platform, or an empty string when it does not match.
+// Add a case here and a corresponding Result field when adding a platform.
 func mediaTagFor(plat string, r *Result) string {
 	switch plat {
 	case "openai":
@@ -121,7 +178,7 @@ func mediaTagFor(plat string, r *Result) string {
 	return ""
 }
 
-// formatSpeedTag 把测速结果(KB/s)格式化为展示字符串。
+// formatSpeedTag formats the speed-test result (KB/s) for display.
 //
 //	<1024 → "NKB/s"
 //	>=1024 → "X.XMB/s"

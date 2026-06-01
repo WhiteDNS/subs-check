@@ -36,7 +36,7 @@ func startSubStore() error {
 		return err
 	}
 	if !filepath.IsAbs(saver.OutputPath) {
-		// 处理用户写相对路径的问题
+		// Handle user-provided relative paths.
 		saver.OutputPath = filepath.Join(saver.BasePath, saver.OutputPath)
 	}
 	nodeName := "node"
@@ -62,7 +62,8 @@ func startSubStore() error {
 	}
 	defer killNode()
 
-	// 如果subs-check内存问题退出，会导致node二进制损坏，启动的node变成僵尸，所以删一遍
+	// If subs-check exits due to memory pressure, the node binary can be
+	// corrupted and leave a stale node process, so remove it first.
 	os.Remove(nodePath)
 	os.Remove(jsPath)
 	os.Remove(overYamlPath)
@@ -70,32 +71,32 @@ func startSubStore() error {
 		return err
 	}
 
-	// 配置日志轮转
+	// Configure log rotation.
 	logWriter := &lumberjack.Logger{
 		Filename:   logPath,
-		MaxSize:    10, // 每个日志文件最大 10MB
-		MaxBackups: 3,  // 保留 3 个旧文件
-		MaxAge:     7,  // 保留 7 天
+		MaxSize:    10, // Maximum 10MB per log file.
+		MaxBackups: 3,  // Keep 3 old files.
+		MaxAge:     7,  // Keep files for 7 days.
 	}
 	defer logWriter.Close()
 
-	// 支持自定义node二进制文件路径，可兼容更多的设备
+	// Support a custom node binary path for more devices.
 	if nodeBinPath := os.Getenv("NODEBIN_PATH"); nodeBinPath != "" {
 		nodePath = nodeBinPath
 	}
-	// 支持自定义sub-store脚本路径
+	// Support a custom sub-store script path.
 	if subStoreBinPath := os.Getenv("SUB_STORE_PATH"); subStoreBinPath != "" {
 		jsPath = subStoreBinPath
 	}
-	// 运行 JavaScript 文件
+	// Run the JavaScript file.
 	cmd := exec.Command(nodePath, jsPath)
-	// js会在运行目录释放依赖文件
+	// The JS releases dependency files in the working directory.
 	cmd.Dir = saver.OutputPath
 	cmd.Stdout = logWriter
 	cmd.Stderr = logWriter
 	cmd.Env = os.Environ()
 
-	// 检查MihomoOverwriteUrl是否包含本地IP，如果是则移除代理环境变量
+	// If MihomoOverwriteUrl contains a local IP, remove proxy environment variables.
 	cleanProxyEnv := false
 	if config.GlobalConfig.MihomoOverwriteUrl != "" {
 		parsedURL, err := url.Parse(config.GlobalConfig.MihomoOverwriteUrl)
@@ -108,23 +109,24 @@ func startSubStore() error {
 		}
 	}
 
-	// ipv4/ipv6 都支持
+	// IPv4 and IPv6 are both supported.
 	hostPort := strings.Split(config.GlobalConfig.SubStorePort, ":")
-	// host可以为空，port不能为空
+	// host can be empty; port cannot.
 	if len(hostPort) == 2 && hostPort[1] != "" {
 		cmd.Env = append(cmd.Env,
 			fmt.Sprintf("SUB_STORE_BACKEND_API_HOST=%s", hostPort[0]),
 			fmt.Sprintf("SUB_STORE_BACKEND_API_PORT=%s", hostPort[1]),
 		)
 	} else if len(hostPort) == 1 {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_BACKEND_API_PORT=%s", hostPort[0])) // 设置端口
+		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_BACKEND_API_PORT=%s", hostPort[0])) // Set port.
 	} else {
 		return fmt.Errorf("sub-store-port invalid port format: %s", config.GlobalConfig.SubStorePort)
 	}
 
 	// https://hub.docker.com/r/xream/sub-store
-	// 这里有详细的变量说明，可能用NO_PROXY过滤到127.0.0.1更合适
-	// 如果MihomoOverwriteUrl包含本地IP，则移除所有代理环境变量
+	// There are detailed variable descriptions here. Filtering 127.0.0.1 via
+	// NO_PROXY may be more appropriate. If MihomoOverwriteUrl contains a local
+	// IP, remove all proxy environment variables.
 	if cleanProxyEnv {
 		filteredEnv := make([]string, 0, len(cmd.Env))
 		proxyVars := []string{"http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"}
@@ -144,55 +146,55 @@ func startSubStore() error {
 		cmd.Env = filteredEnv
 	}
 
-	// 增加body限制，默认1M
+	// Increase the body limit. Default is 1M.
 	if os.Getenv("SUB_STORE_BODY_JSON_LIMIT") == "" {
 		cmd.Env = append(cmd.Env, "SUB_STORE_BODY_JSON_LIMIT=30mb")
 	}
-	// 增加自定义访问路径
+	// Add custom access path.
 	if config.GlobalConfig.SubStorePath != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_FRONTEND_BACKEND_PATH=%s", config.GlobalConfig.SubStorePath))
 		cmd.Env = append(cmd.Env, "SUB_STORE_BACKEND_MERGE=1")
 	}
 
-	// sub-store 环境变量: 后端上传文件至 gist
+	// sub-store environment variable: backend uploads files to gist.
 	if config.GlobalConfig.SubStoreSyncCron != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_BACKEND_SYNC_CRON=%s", config.GlobalConfig.SubStoreSyncCron))
 	}
 
-	// sub-store 环境变量: 自动拉取订阅内容
+	// sub-store environment variable: automatically fetch subscription content.
 	if config.GlobalConfig.SubStoreProduceCron != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_PRODUCE_CRON=%s", config.GlobalConfig.SubStoreProduceCron))
 	}
 
-	// sub-store 环境变量: 当遇到错误时发送通知
+	// sub-store environment variable: send notifications on errors.
 	if config.GlobalConfig.SubStorePushService != "" {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("SUB_STORE_PUSH_SERVICE=%s", config.GlobalConfig.SubStorePushService))
 	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动 sub-store 失败: %w", err)
+		return fmt.Errorf("failed to start sub-store: %w", err)
 	}
 
 	slog.Info("Sub-store service started", "pid", cmd.Process.Pid, "port", config.GlobalConfig.SubStorePort, "log", logPath)
 
-	// 等待程序结束
+	// Wait for the process to exit.
 	return cmd.Wait()
 }
 
-// isLocalIP 检查IP是否是本地IP（127.0.0.1或局域网IP）
+// isLocalIP checks whether an IP is local (127.0.0.1 or a private LAN IP).
 func isLocalIP(host string) bool {
-	// 检查是否是localhost或127.0.0.1
+	// Check whether it is localhost or 127.0.0.1.
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
 	}
 
-	// 检查IP是否有效
+	// Check whether the IP is valid.
 	ip := net.ParseIP(host)
 	if ip == nil {
 		return false
 	}
 
-	// 检查是否是私有IP范围
+	// Check whether it is in a private IP range.
 	privateIPBlocks := []string{
 		"10.0.0.0/8",     // 10.0.0.0 - 10.255.255.255
 		"172.16.0.0/12",  // 172.16.0.0 - 172.31.255.255
@@ -215,47 +217,47 @@ func isLocalIP(host string) bool {
 }
 
 func decodeZstd(nodePath, jsPath, overYamlPath string) error {
-	// 创建 zstd 解码器
+	// Create zstd decoder.
 	zstdDecoder, err := zstd.NewReader(nil)
 	if err != nil {
-		return fmt.Errorf("创建zstd解码器失败: %w", err)
+		return fmt.Errorf("failed to create zstd decoder: %w", err)
 	}
 	defer zstdDecoder.Close()
 
-	// 解压 node 二进制文件
+	// Decompress node binary.
 	nodeFile, err := os.OpenFile(nodePath, os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
-		return fmt.Errorf("创建 node 文件失败: %w", err)
+		return fmt.Errorf("failed to create node file: %w", err)
 	}
 	defer nodeFile.Close()
 
 	zstdDecoder.Reset(bytes.NewReader(EmbeddedNode))
 	if _, err := io.Copy(nodeFile, zstdDecoder); err != nil {
-		return fmt.Errorf("解压 node 二进制文件失败: %w", err)
+		return fmt.Errorf("failed to decompress node binary: %w", err)
 	}
 
-	// 解压 sub-store 脚本
+	// Decompress sub-store script.
 	jsFile, err := os.OpenFile(jsPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("创建 sub-store 脚本文件失败: %w", err)
+		return fmt.Errorf("failed to create sub-store script file: %w", err)
 	}
 	defer jsFile.Close()
 
 	zstdDecoder.Reset(bytes.NewReader(EmbeddedSubStore))
 	if _, err := io.Copy(jsFile, zstdDecoder); err != nil {
-		return fmt.Errorf("解压 sub-store 脚本失败: %w", err)
+		return fmt.Errorf("failed to decompress sub-store script: %w", err)
 	}
 
-	// 解压 覆写文件
+	// Decompress override file.
 	overYamlFile, err := os.OpenFile(overYamlPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("创建 ACL4SSR_Online_Full.yaml 文件失败: %w", err)
+		return fmt.Errorf("failed to create ACL4SSR_Online_Full.yaml file: %w", err)
 	}
 	defer overYamlFile.Close()
 
 	zstdDecoder.Reset(bytes.NewReader(EmbeddedOverrideYaml))
 	if _, err := io.Copy(overYamlFile, zstdDecoder); err != nil {
-		return fmt.Errorf("解压 ACL4SSR_Online_Full.yaml 失败: %w", err)
+		return fmt.Errorf("failed to decompress ACL4SSR_Online_Full.yaml: %w", err)
 	}
 	return nil
 }
@@ -263,29 +265,29 @@ func decodeZstd(nodePath, jsPath, overYamlPath string) error {
 func findProcesses(targetName string) (int32, error) {
 	processes, err := process.Processes()
 	if err != nil {
-		return 0, fmt.Errorf("获取进程列表失败: %v", err)
+		return 0, fmt.Errorf("failed to get process list: %v", err)
 	}
 
 	for _, p := range processes {
 		name, err := p.Exe()
 		// if err != nil {
-		// 	// slog.Debug("获取进程名称失败", "error", err)
+		// 	// slog.Debug("Failed to get process name", "error", err)
 		// }
 		if err == nil && name == targetName {
 			return p.Pid, nil
 		}
 	}
-	return 0, fmt.Errorf("未找到进程")
+	return 0, fmt.Errorf("process not found")
 }
 
 func killProcess(pid int32) error {
 	p, err := process.NewProcess(pid)
 	if err != nil {
-		return fmt.Errorf("无法找到进程 %d: %v", pid, err)
+		return fmt.Errorf("could not find process %d: %v", pid, err)
 	}
 
 	if err := p.Kill(); err != nil {
-		return fmt.Errorf("杀死进程 %d 失败: %v", pid, err)
+		return fmt.Errorf("failed to kill process %d: %v", pid, err)
 	}
 	return nil
 }

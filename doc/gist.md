@@ -1,48 +1,42 @@
-# gist 保存方法
+# Gist Save Method
 
-## 部署
+## Deployment
 
-- 随意创建一个Gist
+- Create a Gist.
+- Configure the Gist ID in `config.yaml`.
+- Configure the Gist token in `config.yaml`.
 
-- 将 gist id 配置到 `config.yaml` 中
+## Worker Reverse Proxy For GitHub API
 
-- 将 gist token 配置到 `config.yaml` 中
+- Deploy [worker](./cloudflare/worker.js) to Cloudflare Workers.
+- In `Variables and Secrets`, set `GITHUB_USER` to your GitHub username.
+- In `Variables and Secrets`, set `GITHUB_ID` to your Gist ID.
+- In `Variables and Secrets`, set `AUTH_TOKEN` as the access token.
+- Set `github-api-mirror` to your Worker URL.
 
-## Worker 反代 GIthub API
-
-- 将 [worker](./cloudflare/worker.js) 部署到 cloudflare workers
-
-- `变量和机密` 设置`GITHUB_USER`为你的 github 用户名
-
-- `变量和机密` 设置`GITHUB_ID`为你的 gist id
-
-- `变量和机密` 设置`AUTH_TOKEN`为访问密钥
-
-- 将 `github-api-mirror` 配置为你的 worker 地址
-
-```
-    github-api-mirror: "https://your-worker-url/github"
+```yaml
+github-api-mirror: "https://your-worker-url/github"
 ```
 
-## 获取订阅
+## Get Subscriptions
 
-> 如果配置了Woker , 将 `key` 修改为对应的即可
-> 订阅格式为 `https://your-worker-url/gist?key=all.yaml&token=AUTH_TOKEN`
+> If a Worker is configured, change `key` to the corresponding filename.
+> Subscription format: `https://your-worker-url/gist?key=all.yaml&token=AUTH_TOKEN`
 
-- yaml格式的订阅
+- YAML subscription:
 
-```
+```text
 https://gist.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_GIST_ID/raw/all.yaml
 ```
 
-- base64编码的订阅
+- Base64 subscription:
 
-```
+```text
 https://gist.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_GIST_ID/raw/base64.txt
 ```
 
-- 带规则的mihomo.yaml文件
+- Rule-based `mihomo.yaml` file:
 
-```
+```text
 https://gist.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_GIST_ID/raw/mihomo.yaml
 ```

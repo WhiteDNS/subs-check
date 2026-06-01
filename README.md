@@ -1,4 +1,4 @@
-<h1 align="center">🚀 订阅检测转换工具</h1>
+<h1 align="center">🚀 Subscription Check And Conversion Tool</h1>
 
 <p align="center">
 	<a href="https://github.com/beck-8/subs-check/releases"><img src="https://img.shields.io/github/v/release/beck-8/subs-check?style=flat-square&include_prereleases&label=version" /></a>
@@ -11,13 +11,12 @@
 
 ---
 
-> **✨ 修复逻辑、简化操作、增加功能、节省内存、一键启动无需配置**
+> **✨ Fixes logic, simplifies operation, adds features, saves memory, and starts with one command without required configuration**
 
-> **⚠️ 注意：** 功能更新频繁，请查看最新的[配置文件](https://github.com/beck-8/subs-check/blob/master/config/config.example.yaml)以获取最新功能。  
-> **⚠️ 注意：** 如果想要查看功能更新，可以参照 [示例配置提交历史](https://github.com/beck-8/subs-check/commits/master/config/config.example.yaml),这里有变动说明有更功能/逻辑更新
+> **⚠️ Note:** Features are updated frequently. Check the latest [example config](https://github.com/beck-8/subs-check/blob/master/config/config.example.yaml) for current options.
+> **⚠️ Note:** To review feature updates, see the [example config commit history](https://github.com/beck-8/subs-check/commits/master/config/config.example.yaml); config changes usually indicate feature or logic updates.
 
-## 📸 预览
-
+## 📸 Preview
 
 ![preview](./doc/images/preview.png)  
 ![result](./doc/images/results.png)  
@@ -26,61 +25,62 @@
 |---|---|
 | ![tgram](./doc/images/tgram.png) | ![dingtalk](./doc/images/dingtalk.png)  |
 
-## ✨ 功能特性
+## ✨ Features
 
-- **🔗 订阅合并**
-- **🔍 节点可用性检测**
-- **🗑️ 节点去重**
-- **⏱️ 节点测速**
-- **🎬 流媒体平台解锁检测**
-- **✏️ 节点重命名**
-- **🔄 任意格式订阅转换**
-- **🔔 支持100+通知渠道**
-- **🌐 内置 Sub-Store**
-- **🖥️ WEB 控制面板**
-- **⏰ 支持 Crontab 表达式**
-- **🖥️ 多平台支持**
+- **🔗 Subscription merging**
+- **🔍 Node availability checks**
+- **🗑️ Node deduplication**
+- **⏱️ Node speed tests**
+- **🎬 Streaming platform unlock checks**
+- **✏️ Node renaming**
+- **🔄 Subscription conversion across formats**
+- **🔔 100+ notification channels**
+- **🌐 Built-in Sub-Store**
+- **🖥️ Web control panel**
+- **⏰ Crontab expression support**
+- **🖥️ Multi-platform support**
 
-## 🛠️ 部署与使用 
-> 首次运行会在当前目录生成默认配置文件。
+## 🛠️ Deployment And Usage
 
-### 🚀 一键安装（Linux）
+The first run generates a default config file in the current directory.
+
+### 🚀 One-Click Install (Linux)
 
 ```bash
-# 默认安装
+# Default install
 bash <(curl -fsSL https://raw.githubusercontent.com/beck-8/subs-check/master/install.sh)
 
-# 使用 wget
+# Use wget
 bash <(wget -qO- https://raw.githubusercontent.com/beck-8/subs-check/master/install.sh)
 
-# 如果无法访问 GitHub，可使用代理
+# Use a proxy if GitHub is unreachable
 bash <(curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/beck-8/subs-check/master/install.sh) https://ghfast.top/
 
-# Alpine 等无 bash 环境
+# Alpine or other environments without bash
 wget -qO /tmp/install.sh https://raw.githubusercontent.com/beck-8/subs-check/master/install.sh && sh /tmp/install.sh && rm -f /tmp/install.sh
 ```
 
 <details>
-  <summary>脚本说明</summary>
+  <summary>Script Details</summary>
 
-安装脚本会自动执行以下操作：
-1. 检测系统架构（x86_64 / aarch64 / armv7 / i386）
-2. 从 GitHub Releases 下载最新版本
-3. 安装到 `/opt/subs-check` 目录
-4. 配置 systemd 服务
-5. 交互式选择是否开机自启动
-6. 交互式选择是否立即启动
+The install script automatically:
+1. Detects system architecture: x86_64, aarch64, armv7, or i386.
+2. Downloads the latest version from GitHub Releases.
+3. Installs to `/opt/subs-check`.
+4. Configures the systemd service.
+5. Asks whether to enable startup on boot.
+6. Asks whether to start the service immediately.
 
-**服务管理：**
+**Service management:**
 ```bash
-systemctl start subs-check    # 启动
-systemctl stop subs-check     # 停止
-systemctl restart subs-check  # 重启
-systemctl status subs-check   # 状态
-journalctl -u subs-check -f   # 日志
+systemctl start subs-check    # Start
+systemctl stop subs-check     # Stop
+systemctl restart subs-check  # Restart
+systemctl status subs-check   # Status
+journalctl -u subs-check -f   # Logs
 ```
 
-**卸载方法：**
+**Uninstall:**
 ```bash
 systemctl stop subs-check
 systemctl disable subs-check
@@ -90,42 +90,47 @@ systemctl daemon-reload
 
 </details>
 
-### 🪜 代理设置（可选）
-<details>
-  <summary>展开查看</summary>
+### 🪜 Proxy Settings (Optional)
 
-如果拉取非Github订阅速度慢，可使用通用的 HTTP_PROXY HTTPS_PROXY 环境变量加快速度；此变量不会影响节点测试速度
+<details>
+  <summary>Show Details</summary>
+
+If fetching non-GitHub subscriptions is slow, use standard `HTTP_PROXY` and `HTTPS_PROXY` environment variables. These variables do not affect node test speed.
+
 ```bash
-# HTTP 代理示例
+# HTTP proxy example
 export HTTP_PROXY=http://username:password@192.168.1.1:7890
 export HTTPS_PROXY=http://username:password@192.168.1.1:7890
 
-# SOCKS5 代理示例
+# SOCKS5 proxy example
 export HTTP_PROXY=socks5://username:password@192.168.1.1:7890
 export HTTPS_PROXY=socks5://username:password@192.168.1.1:7890
 
-# SOCKS5H 代理示例
+# SOCKS5H proxy example
 export HTTP_PROXY=socks5h://username:password@192.168.1.1:7890
 export HTTPS_PROXY=socks5h://username:password@192.168.1.1:7890
 ```
-如果想加速github的链接，可使用网上公开的github proxy，或者使用下方自建测速地址处的worker.js自建加速
-```
-# Github Proxy，获取订阅使用，结尾要带的 /
+
+To accelerate GitHub links, use a public GitHub proxy or deploy your own acceleration with the `worker.js` shown in the self-hosted speed-test section.
+
+```yaml
+# GitHub proxy used for fetching subscriptions. Must end with /.
 # github-proxy: "https://ghfast.top/"
 github-proxy: "https://custom-domain/raw/"
 ```
 
 </details>
 
-### 🌐 自建测速地址（可选）
+### 🌐 Self-Hosted Speed-Test URL (Optional)
+
 <details>
-  <summary>展开查看</summary>
+  <summary>Show Details</summary>
 
-> **⚠️ 注意：** 避免使用 Speedtest 或 Cloudflare 下载链接，因为部分节点会屏蔽测速网站。
+> **⚠️ Note:** Avoid Speedtest and Cloudflare download links because some nodes block speed-test sites.
 
-1. 将 [worker.js](./doc/cloudflare/worker.js) 部署到 Cloudflare Workers。
-2. 绑定自定义域名（避免被节点屏蔽）。
-3. 在配置文件中设置 `speed-test-url` 为你的 Workers 地址：
+1. Deploy [worker.js](./doc/cloudflare/worker.js) to Cloudflare Workers.
+2. Bind a custom domain to reduce blocking by nodes.
+3. Set `speed-test-url` in the config to your Workers URL:
 
 ```yaml
 # 100MB
@@ -136,14 +141,14 @@ speed-test-url: https://custom-domain/speedtest?bytes=1073741824
 
 </details>
 
-### 🐳 Docker 运行
+### 🐳 Docker Run
 
-> **⚠️ 注意：**  
-> - 限制内存请使用 `--memory="500m"`。  
-> - 可通过环境变量 `API_KEY` 设置 Web 控制面板的 API Key。
+> **⚠️ Note:**
+> - Use `--memory="500m"` to limit memory.
+> - Set the web control panel API key with the `API_KEY` environment variable.
 
 ```bash
-# 基础运行
+# Basic run
 docker run -d \
   --name subs-check \
   -p 8299:8299 \
@@ -153,7 +158,7 @@ docker run -d \
   --restart always \
   ghcr.io/beck-8/subs-check:latest
 
-# 使用代理运行
+# Run with proxy
 docker run -d \
   --name subs-check \
   -p 8299:8299 \
@@ -166,7 +171,7 @@ docker run -d \
   ghcr.io/beck-8/subs-check:latest
 ```
 
-### 📜 Docker-Compose
+### 📜 Docker Compose
 
 ```yaml
 version: "3"
@@ -188,37 +193,39 @@ services:
     restart: always
     network_mode: bridge
 ```
-### 📦 二进制文件运行
 
-下载 [Releases](https://github.com/beck-8/subs-check/releases) 中适合的版本，解压后直接运行即可。
+### 📦 Binary Run
 
-### 🖥️ 源码运行
+Download the matching version from [Releases](https://github.com/beck-8/subs-check/releases), extract it, and run it directly.
+
+### 🖥️ Source Run
 
 ```bash
 go run . -f ./config/config.yaml
 ```
 
-## 🔔 通知渠道配置（可选）
+## 🔔 Notification Channels (Optional)
+
 <details>
-  <summary>展开查看</summary>
+  <summary>Show Details</summary>
 
-> **📦 支持 100+ 通知渠道**，通过 [Apprise](https://github.com/caronc/apprise) 发送通知。
+> **📦 Supports 100+ notification channels** through [Apprise](https://github.com/caronc/apprise).
 
-### 🌐 Vercel 部署
+### 🌐 Vercel Deployment
 
-1. 点击[**此处**](https://vercel.com/new/clone?repository-url=https://github.com/beck-8/apprise_vercel)部署 Apprise。
-2. 部署后获取 API 链接，如 `https://testapprise-beck8s-projects.vercel.app/notify`。
-3. 建议为 Vercel 项目设置自定义域名`diydomain.com`（国内访问 Vercel 可能受限）。
+1. Click [**here**](https://vercel.com/new/clone?repository-url=https://github.com/beck-8/apprise_vercel) to deploy Apprise.
+2. After deployment, get the API URL, such as `https://testapprise-beck8s-projects.vercel.app/notify`.
+3. A custom Vercel domain such as `diydomain.com` is recommended if access to Vercel is restricted in your region.
 
-### 🐳 Docker 部署
+### 🐳 Docker Deployment
 
-> **⚠️ 注意：** 不支持 arm/v7。
+> **⚠️ Note:** arm/v7 is not supported.
 
 ```bash
-# 基础运行
+# Basic run
 docker run --name apprise -p 8000:8000 --restart always -d caronc/apprise:latest
 
-# 使用代理运行
+# Run with proxy
 docker run --name apprise \
   -p 8000:8000 \
   -e HTTP_PROXY=http://192.168.1.1:7890 \
@@ -227,44 +234,44 @@ docker run --name apprise \
   -d caronc/apprise:latest
 ```
 
-### 📝 配置文件中配置通知
+### 📝 Notification Config
 
 ```yaml
-# 填写搭建的apprise API server 地址
+# Apprise API server URL.
 # https://notify.xxxx.us.kg/notify
 apprise-api-server: "https://diydomain.com/notify"
-# 填写通知目标
-# 支持100+ 个通知渠道，详细格式请参照 https://github.com/caronc/apprise
+# Notification targets.
+# Supports 100+ notification channels. See https://github.com/caronc/apprise for formats.
 recipient-url: 
-  # telegram格式：tgram://{bot_token}/{chat_id}
+  # Telegram format: tgram://{bot_token}/{chat_id}
   # - tgram://xxxxxx/-1002149239223
-  # 钉钉格式：dingtalk://{Secret}@{ApiKey}
+  # DingTalk format: dingtalk://{Secret}@{ApiKey}
   # - dingtalk://xxxxxx@xxxxxxx
-# 自定义通知标题
-notify-title: "🔔 节点状态更新"
+# Custom notification title.
+notify-title: "🔔 Node Status Update"
 ```
 </details>
 
-## 💾 保存方法配置
+## 💾 Save Method Config
 
-> **⚠️ 注意：** 选择保存方法时，请更改 `save-method` 配置。
+> **⚠️ Note:** Change the `save-method` config when selecting a save method.
 
-- **本地保存**：保存到 `./output` 文件夹。
-- **R2**：保存到 Cloudflare R2 [配置方法](./doc/r2.md)。
-- **Gist**：保存到 GitHub Gist [配置方法](./doc/gist.md)。
-- **WebDAV**：保存到 WebDAV 服务器 [配置方法](./doc/webdav.md)。
-- **S3**：保存到 S3 对象存储。
+- **Local save**: save to the `./output` folder.
+- **R2**: save to Cloudflare R2. See [configuration](./doc/r2.md).
+- **Gist**: save to GitHub Gist. See [configuration](./doc/gist.md).
+- **WebDAV**: save to a WebDAV server. See [configuration](./doc/webdav.md).
+- **S3**: save to S3 object storage.
 
-## 📲 订阅使用方法
+## 📲 Subscription Usage
 
-> **💡 提示：** 内置 Sub-Store，可生成多种订阅格式；高级玩家可DIY很多功能
+> **💡 Tip:** Built-in Sub-Store can generate multiple subscription formats. Advanced users can build many custom flows.
 
-**🚀 通用订阅**
+**🚀 General Subscriptions**
 ```bash
-# 通用订阅
+# General subscription
 http://127.0.0.1:8299/download/sub
 
-# URI 订阅
+# URI subscription
 http://127.0.0.1:8299/download/sub?target=URI
 
 # Mihomo/ClashMeta
@@ -292,63 +299,68 @@ http://127.0.0.1:8299/download/sub?target=Surge
 http://127.0.0.1:8299/download/sub?target=Surfboard
 ```
 
-**🚀 Mihomo/Clash 订阅（带规则）：**
-> 默认使用 `https://raw.githubusercontent.com/beck-8/override-hub/refs/heads/main/yaml/ACL4SSR_Online_Full.yaml` 覆写  
-可在配置中更改 `mihomo-overwrite-url`。
+**🚀 Mihomo/Clash Subscription With Rules**
+
+The default override is `https://raw.githubusercontent.com/beck-8/override-hub/refs/heads/main/yaml/ACL4SSR_Online_Full.yaml`.
+You can change it with `mihomo-overwrite-url`.
+
 ```bash
 http://127.0.0.1:8299/api/file/mihomo
 ```
 
-## 🌐 内置端口说明
-> subs-check本身会在测试完后保存三个文件到output目录中；output目录中的所有文件会被8199端口提供文件服务
+## 🌐 Built-In Ports
 
-| 服务地址                        | 格式说明                | 来源说明|
-|-------------------------------|-------------------|----|
-| `http://127.0.0.1:8199/sub/all.yaml`   | Clash 格式节点 |由subs-check直接生成|
-| `http://127.0.0.1:8199/sub/mihomo.yaml`| 带分流规则的 Mihomo/Clash 订阅 |从上方sub-store转换下载后提供|
-| `http://127.0.0.1:8199/sub/base64.txt` | Base64 格式订阅 |从上方sub-store转换下载后提供|
+After a check, subs-check saves three files into the output directory. All files in output are served on port 8199.
 
-## 🗺️ 架构图
+| Service URL | Format | Source |
+|---|---|---|
+| `http://127.0.0.1:8199/sub/all.yaml` | Clash-format nodes | Generated directly by subs-check |
+| `http://127.0.0.1:8199/sub/mihomo.yaml` | Mihomo/Clash subscription with routing rules | Converted by sub-store above, then served |
+| `http://127.0.0.1:8199/sub/base64.txt` | Base64 subscription | Converted by sub-store above, then served |
+
+## 🗺️ Architecture
+
 <details>
-  <summary>展开查看</summary>
+  <summary>Show Details</summary>
 
 ```mermaid
 graph TD
-    A[订阅链接] -->|获取订阅链接| B[subs-check]
-    subgraph subs-check 处理流程
-        B -->|转成 YAML 格式| B1[节点去重]
-        B1 -->|去除冗余节点| B2[测活]
-        B2 -->|节点可用| B3[流媒体+重命名]
-        B2 -->|节点不可用| X[丢弃]
-        B3 -->|filter 通过| B4[测速]
-        B3 -->|filter 不通过| X[丢弃]
-        B4 -->|测速达标| B5[生成 all.yaml]
-        B4 -->|测速不达标| X[丢弃]
+    A[Subscription URLs] -->|Fetch subscriptions| B[subs-check]
+    subgraph subs-check pipeline
+        B -->|Convert to YAML| B1[Node deduplication]
+        B1 -->|Remove redundant nodes| B2[Alive check]
+        B2 -->|Node usable| B3[Media checks + rename]
+        B2 -->|Node unusable| X[Discard]
+        B3 -->|filter passed| B4[Speed test]
+        B3 -->|filter failed| X[Discard]
+        B4 -->|Speed passes| B5[Generate all.yaml]
+        B4 -->|Speed fails| X[Discard]
     end
-    B5 -->|保存到 output 目录| C[output 目录]
-    B5 -->|上传 all.yaml| D[sub-store]
-    C -->|保存到各位置| H1[R2/Gist/WebDAV/S3]
-    H1 -->|存储完成| H2[发送消息通知]
-    D -->|提供订阅转换服务| E[sub-store 转换服务]
-    subgraph sub-store 独立功能
-        E -->|生成配置文件| E1[mihomo.yaml, base64.txt]
-        E -->|其他格式转换| E2[Clash, V2Ray, ShadowRocket 等]
-        E -->|订阅分享| E3[分享订阅链接]
+    B5 -->|Save to output directory| C[output directory]
+    B5 -->|Upload all.yaml| D[sub-store]
+    C -->|Save to destinations| H1[R2/Gist/WebDAV/S3]
+    H1 -->|Storage complete| H2[Send notification]
+    D -->|Provide conversion service| E[sub-store conversion service]
+    subgraph sub-store standalone features
+        E -->|Generate config files| E1[mihomo.yaml, base64.txt]
+        E -->|Convert other formats| E2[Clash, V2Ray, ShadowRocket, etc.]
+        E -->|Subscription sharing| E3[Share subscription links]
     end
-    E1 -->|保存到 output 目录| C
-    C -->|文件服务| F[8199 端口: /sub]
-    B -->|Web 管理| G[8199 端口: /admin]
+    E1 -->|Save to output directory| C
+    C -->|File service| F[8199 port: /sub]
+    B -->|Web management| G[8199 port: /admin]
 ``` 
 
 </details>
 
-## 🙏 鸣谢
-[cmliu](https://github.com/cmliu)、[Sub-Store](https://github.com/sub-store-org/Sub-Store)、[bestruirui](https://github.com/bestruirui/BestSub)、[1password](https://1password.com/)、[ipinfo.io](https://ipinfo.io/)
+## 🙏 Credits
+
+[cmliu](https://github.com/cmliu), [Sub-Store](https://github.com/sub-store-org/Sub-Store), [bestruirui](https://github.com/bestruirui/BestSub), [1password](https://1password.com/), [ipinfo.io](https://ipinfo.io/)
 
 ## ⭐ Star History
 
 [![Stargazers over time](https://starchart.cc/beck-8/subs-check.svg?variant=adaptive)](https://starchart.cc/beck-8/subs-check)
 
-## ⚖️ 免责声明
+## ⚖️ Disclaimer
 
-本工具仅供学习和研究使用，使用者应自行承担风险并遵守相关法律法规。
+This tool is provided only for learning and research. Users are responsible for their own risk and must comply with applicable laws and regulations.

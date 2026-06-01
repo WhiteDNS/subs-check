@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// initHttpServer 初始化HTTP服务器
+// initHttpServer initializes the HTTP server.
 func (app *App) initHttpServer() error {
 	gin.SetMode(gin.ReleaseMode)
 	// Route gin's access log and panic stacks into their own temp file
@@ -34,98 +34,98 @@ func (app *App) initHttpServer() error {
 
 	saver, err := method.NewLocalSaver()
 	if err != nil {
-		return fmt.Errorf("获取http监听目录失败: %w", err)
+		return fmt.Errorf("failed to get HTTP listen directory: %w", err)
 	}
 
-	// 静态文件路由 - 订阅服务相关，始终启用
-	// 最初不应该不带路径，现在保持兼容
+	// Static file routes for the subscription service are always enabled.
+	// The original path should have had a prefix, but keep this for compatibility.
 	router.StaticFile("/all.yaml", saver.OutputPath+"/all.yaml")
 	router.StaticFile("/all.txt", saver.OutputPath+"/all.txt")
 	router.StaticFile("/base64.txt", saver.OutputPath+"/base64.txt")
 	router.StaticFile("/mihomo.yaml", saver.OutputPath+"/mihomo.yaml")
 	router.StaticFile("/ACL4SSR_Online_Full.yaml", saver.OutputPath+"/ACL4SSR_Online_Full.yaml")
-	// CM佬用的布丁狗
+	// Legacy pudding route used by CM.
 	router.StaticFile("/bdg.yaml", saver.OutputPath+"/bdg.yaml")
 
 	router.Static("/sub/", saver.OutputPath)
 
-	// pprof 路由，空闲时不消耗性能
+	// pprof routes do not consume performance while idle.
 	pprof.Register(router)
 
-	// 根据配置决定是否启用Web控制面板
+	// Enable the web control panel based on config.
 	if config.GlobalConfig.EnableWebUI {
 		if config.GlobalConfig.APIKey == "" {
 			if apiKey := os.Getenv("API_KEY"); apiKey != "" {
 				config.GlobalConfig.APIKey = apiKey
 			} else {
 				config.GlobalConfig.APIKey = GenerateSimpleKey()
-				slog.Warn("未设置api-key，已生成一个随机api-key", "api-key", config.GlobalConfig.APIKey)
+				slog.Warn("api-key is not set; generated a random api-key", "api-key", config.GlobalConfig.APIKey)
 			}
 		}
-		slog.Info("启用Web控制面板", "path", "http://ip:port/admin", "api-key", config.GlobalConfig.APIKey)
+		slog.Info("Web control panel enabled", "path", "http://ip:port/admin", "api-key", config.GlobalConfig.APIKey)
 
-		// 设置模板加载 - 只有在启用Web控制面板时才加载
+		// Load templates only when the web control panel is enabled.
 		router.SetHTMLTemplate(template.Must(template.New("").ParseFS(configFS, "templates/*.html")))
 
-		// API路由
+		// API routes.
 		api := router.Group("/api")
-		api.Use(app.authMiddleware(config.GlobalConfig.APIKey)) // 添加认证中间件
+		api.Use(app.authMiddleware(config.GlobalConfig.APIKey)) // Add authentication middleware.
 		{
-			// 配置相关API
+			// Config APIs.
 			api.GET("/config", app.getConfig)
 			api.POST("/config", app.updateConfig)
 
-			// 状态相关API
+			// Status APIs.
 			api.GET("/status", app.getStatus)
 			api.POST("/trigger-check", app.triggerCheckHandler)
 			api.POST("/force-close", app.forceCloseHandler)
-			// 版本相关API
+			// Version APIs.
 			api.GET("/version", app.getVersion)
 
-			// 日志相关API
+			// Log APIs.
 			api.GET("/logs", app.getLogs)
 		}
 
-		// 配置页面
+		// Config page.
 		router.GET("/admin", func(c *gin.Context) {
 			c.HTML(http.StatusOK, "admin.html", gin.H{
 				"configPath": app.configPath,
 			})
 		})
 	} else {
-		slog.Info("Web控制面板已禁用")
+		slog.Info("Web control panel disabled")
 	}
 
-	// 启动HTTP服务器
+	// Start HTTP server.
 	go func() {
 		for {
 			if err := router.Run(config.GlobalConfig.ListenPort); err != nil {
-				slog.Error(fmt.Sprintf("HTTP服务器启动失败，正在重启中: %v", err))
+				slog.Error(fmt.Sprintf("HTTP server failed to start; restarting: %v", err))
 			}
 			time.Sleep(30 * time.Second)
 		}
 	}()
-	slog.Info("HTTP服务器启动", "port", config.GlobalConfig.ListenPort)
+	slog.Info("HTTP server started", "port", config.GlobalConfig.ListenPort)
 	return nil
 }
 
-// authMiddleware API认证中间件
+// authMiddleware is API authentication middleware.
 func (app *App) authMiddleware(key string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-API-Key")
 		if subtle.ConstantTimeCompare([]byte(apiKey), []byte(key)) != 1 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "无效的API密钥"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 			return
 		}
 		c.Next()
 	}
 }
 
-// getConfig 获取配置文件内容
+// getConfig returns config file content.
 func (app *App) getConfig(c *gin.Context) {
 	configData, err := os.ReadFile(app.configPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置文件失败: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read config file: %v", err)})
 		return
 	}
 
@@ -134,34 +134,34 @@ func (app *App) getConfig(c *gin.Context) {
 	})
 }
 
-// updateConfig 更新配置文件内容
+// updateConfig updates config file content.
 func (app *App) updateConfig(c *gin.Context) {
 	var req struct {
 		Content string `json:"content"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求格式"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
 		return
 	}
-	// 验证YAML格式
+	// Validate YAML format.
 	var yamlData map[string]any
 	if err := yaml.Unmarshal([]byte(req.Content), &yamlData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("YAML格式错误: %v", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("YAML format error: %v", err)})
 		return
 	}
 
-	// 写入新配置
+	// Write new config.
 	if err := os.WriteFile(app.configPath, []byte(req.Content), 0644); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("保存配置文件失败: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save config file: %v", err)})
 		return
 	}
 
-	// 配置文件监听器会自动重新加载配置
-	c.JSON(http.StatusOK, gin.H{"message": "配置已更新"})
+	// Config file watcher reloads config automatically.
+	c.JSON(http.StatusOK, gin.H{"message": "config updated"})
 }
 
-// getStatus 获取应用状态
+// getStatus returns application status.
 func (app *App) getStatus(c *gin.Context) {
 	phaseResults := make(map[string]*check.PhaseResult, 3)
 	for i := 1; i <= 3; i++ {
@@ -181,32 +181,32 @@ func (app *App) getStatus(c *gin.Context) {
 		"speedPass":  check.SpeedOk.Load(),
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"checking":      app.checking.Load(),
-		"proxyCount":    check.ProxyCount.Load(),
-		"available":     check.Available.Load(),
-		"progress":      check.Progress.Load(),
-		"phase":         check.Phase.Load(),
-		"phaseResults":  phaseResults,
-		"pipeline":      pipeline,
-		"hasSpeedTest":  config.GlobalConfig.SpeedTestUrl != "",
+		"checking":     app.checking.Load(),
+		"proxyCount":   check.ProxyCount.Load(),
+		"available":    check.Available.Load(),
+		"progress":     check.Progress.Load(),
+		"phase":        check.Phase.Load(),
+		"phaseResults": phaseResults,
+		"pipeline":     pipeline,
+		"hasSpeedTest": config.GlobalConfig.SpeedTestUrl != "",
 	})
 }
 
-// triggerCheckHandler 手动触发检测
+// triggerCheckHandler manually triggers a check.
 func (app *App) triggerCheckHandler(c *gin.Context) {
 	app.TriggerCheck()
-	c.JSON(http.StatusOK, gin.H{"message": "已触发检测"})
+	c.JSON(http.StatusOK, gin.H{"message": "check triggered"})
 }
 
-// forceCloseHandler 强制关闭
+// forceCloseHandler requests a forced stop.
 func (app *App) forceCloseHandler(c *gin.Context) {
 	check.RequestCancel()
-	c.JSON(http.StatusOK, gin.H{"message": "已强制关闭"})
+	c.JSON(http.StatusOK, gin.H{"message": "forced stop requested"})
 }
 
-// getLogs 获取最近日志
+// getLogs returns recent logs.
 func (app *App) getLogs(c *gin.Context) {
-	// 简单实现，从日志文件读取最后xx行
+	// Simple implementation: read the last N lines from the log file.
 	logPath := TempLog()
 
 	if _, err := os.Stat(logPath); os.IsNotExist(err) {
@@ -215,13 +215,13 @@ func (app *App) getLogs(c *gin.Context) {
 	}
 	lines, err := ReadLastNLines(logPath, 100)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取日志失败: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to read logs: %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"logs": lines})
 }
 
-// getLogs 获取最近日志
+// getVersion returns the application version.
 func (app *App) getVersion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"version": app.version})
 }
