@@ -1,12 +1,15 @@
 package app
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
 
@@ -201,5 +204,41 @@ func TestParseTypeQueryIncludesAliases(t *testing.T) {
 		if _, ok := types[want]; !ok {
 			t.Fatalf("expected alias %q in parsed types: %v", want, types)
 		}
+	}
+}
+
+func TestServeSubFileFilteredYAMLRendersInline(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	data := []byte(`
+proxies:
+  - name: trojan-one
+    type: trojan
+  - name: vless-one
+    type: vless
+`)
+	if err := os.WriteFile(filepath.Join(dir, "all.yaml"), data, 0o644); err != nil {
+		t.Fatalf("write all.yaml: %v", err)
+	}
+
+	router := gin.New()
+	router.GET("/sub/*filepath", serveSubFile(dir))
+
+	req := httptest.NewRequest(http.MethodGet, "/sub/all.yaml?type=trojan", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Disposition"); got != "inline" {
+		t.Fatalf("Content-Disposition = %q, want inline", got)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain", got)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "trojan-one") || strings.Contains(body, "vless-one") {
+		t.Fatalf("unexpected filtered body:\n%s", body)
 	}
 }

@@ -122,6 +122,7 @@ func serveSubFile(outputPath string) gin.HandlerFunc {
 		path := filepath.Join(outputPath, name)
 		typeQuery := c.Query("type")
 		if typeQuery == "" {
+			setInlineSubscriptionHeaders(c, name)
 			c.File(path)
 			return
 		}
@@ -145,7 +146,16 @@ func serveSubFile(outputPath string) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.Data(http.StatusOK, "application/x-yaml; charset=utf-8", filtered)
+		setInlineSubscriptionHeaders(c, name)
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", filtered)
+	}
+}
+
+func setInlineSubscriptionHeaders(c *gin.Context, name string) {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".yaml", ".yml", ".txt":
+		c.Header("Content-Disposition", "inline")
+		c.Header("Content-Type", "text/plain; charset=utf-8")
 	}
 }
 
