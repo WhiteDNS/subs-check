@@ -58,6 +58,25 @@ func TestMarshalProxies_SingleResult(t *testing.T) {
 	}
 }
 
+func TestSortResultsBySpeed_DescendingStable(t *testing.T) {
+	results := []check.Result{
+		{Proxy: map[string]any{"name": "slow"}, Speed: 100},
+		{Proxy: map[string]any{"name": "fast"}, Speed: 900},
+		{Proxy: map[string]any{"name": "tie-a"}, Speed: 300},
+		{Proxy: map[string]any{"name": "tie-b"}, Speed: 300},
+		{Proxy: map[string]any{"name": "untested"}, Speed: 0},
+	}
+
+	sortResultsBySpeed(results)
+
+	want := []string{"fast", "tie-a", "tie-b", "slow", "untested"}
+	for i, name := range want {
+		if got := results[i].Proxy["name"]; got != name {
+			t.Fatalf("results[%d] = %v, want %s", i, got, name)
+		}
+	}
+}
+
 // ---- fetchSubStoreData ----
 
 func TestFetchSubStoreData_Success(t *testing.T) {

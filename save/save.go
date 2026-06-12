@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 
 	"github.com/beck-8/subs-check/check"
 	"github.com/beck-8/subs-check/config"
@@ -21,9 +22,11 @@ type SaveFunc func(data []byte, filename string) error
 // Order matters:
 //  1. Serialize results to history first while proxy["name"] is still original,
 //     so history stays clean and keep-days does not accumulate tags on reload.
-//  2. Mutate each result.Proxy["name"] in place to the final display name from
+//  2. Optionally sort final output by speed while the Result.Speed values are
+//     still available.
+//  3. Mutate each result.Proxy["name"] in place to the final display name from
 //     check.RenderName: base + media tags + speed tag + sub_tag.
-//  3. Serialize the mutated results to all.yaml, mihomo.yaml, and base64.txt,
+//  4. Serialize the mutated results to all.yaml, mihomo.yaml, and base64.txt,
 //     then write them locally, remotely, and to SubStore.
 //
 // Implicit contract: after SaveConfig returns, results are considered consumed.
@@ -48,7 +51,12 @@ func SaveConfig(results []check.Result) {
 		}
 	}
 
-	// 2. Mutate each proxy name in place to the final display name.
+	// 2. Sort the generated subscription by speed when requested.
+	if config.GlobalConfig.SortBySpeed {
+		sortResultsBySpeed(results)
+	}
+
+	// 3. Mutate each proxy name in place to the final display name.
 	for i := range results {
 		if results[i].Proxy == nil {
 			continue
@@ -56,7 +64,7 @@ func SaveConfig(results []check.Result) {
 		results[i].Proxy["name"] = check.RenderName(results[i], true)
 	}
 
-	// 3. Serialize mutated results for all.yaml, remote storage, and SubStore.
+	// 4. Serialize mutated results for all.yaml, remote storage, and SubStore.
 	allYamlData, err := marshalProxies(results)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to serialize proxy data: %v", err))
@@ -98,6 +106,12 @@ func SaveConfig(results []check.Result) {
 	saveIfNotEmpty(remoteSaver, allYamlData, "all.yaml")
 	saveIfNotEmpty(remoteSaver, mihomoData, "mihomo.yaml")
 	saveIfNotEmpty(remoteSaver, base64Data, "base64.txt")
+}
+
+func sortResultsBySpeed(results []check.Result) {
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].Speed > results[j].Speed
+	})
 }
 
 // marshalProxies extracts proxies from check results and serializes them as YAML.

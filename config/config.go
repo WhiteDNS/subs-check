@@ -18,6 +18,7 @@ type Config struct {
 	DownloadMB           int       `yaml:"download-mb"`
 	TotalSpeedLimit      int       `yaml:"total-speed-limit"`
 	MinSpeed             int       `yaml:"min-speed"`
+	SortBySpeed          bool      `yaml:"sort-by-speed"`
 	Timeout              int       `yaml:"timeout"`
 	MediaCheckTimeout    int       `yaml:"media-check-timeout"`
 	FilterRegex          string    `yaml:"filter-regex"`

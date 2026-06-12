@@ -50,6 +50,10 @@ alive-test-url: http://gstatic.com/generate_204
 speed-test-url: https://github.com/AaronFeng753/Waifu2x-Extension-GUI/releases/download/v2.21.12/Waifu2x-Extension-GUI-v2.21.12-Portable.7z
 # Discard nodes below this speed-test result (KB/s).
 min-speed: 512
+# Sort generated subscriptions by measured speed, fastest first.
+# Only useful when speed-test-url is configured. Nodes with equal speed keep
+# their existing order.
+sort-by-speed: false
 # Download test duration in seconds. Related to the download file size; default maximum is 10s.
 download-timeout: 10
 # Per-node speed-test download size limit in MB. 0 means unlimited.
