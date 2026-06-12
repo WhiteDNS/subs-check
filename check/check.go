@@ -298,6 +298,9 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	if len(patterns) > 0 {
 		slog.Info(fmt.Sprintf("Applying node filters: %d regexes", len(patterns)))
 	}
+	if config.GlobalConfig.CloudflareOnly {
+		slog.Info("Applying Cloudflare endpoint filter")
+	}
 
 	// Whole-pipeline cancellation: collector pulls the trigger on SuccessLimit,
 	// RequestCancel pulls it on external SIGHUP / HTTP force-close.
@@ -392,7 +395,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	Phase.Store(0)
 
 	slog.Info(fmt.Sprintf("Alive nodes: %d", aliveOk))
-	if len(patterns) > 0 {
+	if len(patterns) > 0 || config.GlobalConfig.CloudflareOnly {
 		slog.Info(fmt.Sprintf("Nodes before filtering: %d, after filtering: %d", mediaDone, filterPassed))
 	} else if hasSpeedTest {
 		slog.Info(fmt.Sprintf("Media stage passed nodes: %d", filterPassed))

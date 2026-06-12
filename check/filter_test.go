@@ -91,3 +91,53 @@ func TestFilterResults_DoesNotMutateName(t *testing.T) {
 		}
 	})
 }
+
+func TestFilterResults_CloudflareOnlyMatchesEndpointServer(t *testing.T) {
+	withConfig(t, config.Config{
+		CloudflareOnly: true,
+		Platforms:      []string{},
+	}, func() {
+		results := []Result{
+			{Proxy: map[string]any{"name": "cf-ip", "server": "104.16.0.1"}},
+			{Proxy: map[string]any{"name": "cf-host", "server": "app.example.workers.dev"}},
+			{Proxy: map[string]any{"name": "non-cf", "server": "8.8.8.8"}},
+			{
+				Proxy: map[string]any{
+					"name":   "sni-only",
+					"server": "8.8.8.8",
+					"sni":    "www.cloudflare.com",
+				},
+			},
+		}
+
+		got := FilterResults(results)
+		if len(got) != 2 {
+			t.Fatalf("expected 2 Cloudflare endpoint matches, got %d", len(got))
+		}
+		if got[0].Proxy["name"] != "cf-ip" || got[1].Proxy["name"] != "cf-host" {
+			t.Fatalf("unexpected filtered results: %#v", got)
+		}
+	})
+}
+
+func TestFilterResults_CloudflareOnlyComposesWithRegex(t *testing.T) {
+	withConfig(t, config.Config{
+		CloudflareOnly: true,
+		Filter:         []string{"keep"},
+		Platforms:      []string{},
+	}, func() {
+		results := []Result{
+			{Proxy: map[string]any{"name": "keep-cf", "server": "173.245.48.10"}},
+			{Proxy: map[string]any{"name": "drop-cf", "server": "173.245.48.11"}},
+			{Proxy: map[string]any{"name": "keep-non-cf", "server": "8.8.8.8"}},
+		}
+
+		got := FilterResults(results)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(got))
+		}
+		if got[0].Proxy["name"] != "keep-cf" {
+			t.Fatalf("expected keep-cf, got %v", got[0].Proxy["name"])
+		}
+	})
+}

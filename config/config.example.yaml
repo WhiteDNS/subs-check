@@ -105,6 +105,11 @@ filter:
   # - "CL-"                      # Keep nodes that unlock Claude.
   # - "SP-"                      # Keep nodes that unlock Spotify.
 
+# Keep only nodes whose endpoint server is Cloudflare-fronted. This checks the
+# proxy server hostname/IP itself, not whether the node can reach Cloudflare.
+# Can be combined with the regex filters above.
+cloudflare-only: false
+
 # Whether to enable media checks. IP fraud checks depend on renaming.
 media-check: false
 # Media-check timeout in seconds. Defaults to 10 seconds when unset.

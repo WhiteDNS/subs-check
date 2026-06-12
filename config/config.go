@@ -70,6 +70,7 @@ type Config struct {
 	Proxy                string    `yaml:"proxy"`
 	CallbackScript       string    `yaml:"callback-script"`
 	Filter               []string  `yaml:"filter"`
+	CloudflareOnly       bool      `yaml:"cloudflare-only"`
 	KeepDays             int       `yaml:"keep-days"`
 	DNS                  DNSConfig `yaml:"dns"`
 }

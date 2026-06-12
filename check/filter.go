@@ -30,9 +30,15 @@ func CompileFilterPatterns() []*regexp.Regexp {
 	return patterns
 }
 
-// MatchesFilter reports whether r's rendered name (without speed tag)
-// matches any pattern. An empty pattern slice counts as "passes".
+// MatchesFilter reports whether r passes all enabled filters.
+// CloudflareOnly checks the proxy endpoint itself; regex filters match the
+// rendered name without speed tags. An empty regex slice counts as "passes".
 func MatchesFilter(r Result, patterns []*regexp.Regexp) bool {
+	if config.GlobalConfig.CloudflareOnly {
+		if r.Proxy == nil || !isCloudflareFrontedProxy(r.Proxy) {
+			return false
+		}
+	}
 	if len(patterns) == 0 {
 		return true
 	}
@@ -48,19 +54,25 @@ func MatchesFilter(r Result, patterns []*regexp.Regexp) bool {
 	return false
 }
 
-// FilterResults filters nodes using the configured regular expressions.
+// FilterResults filters nodes using the configured endpoint and regex filters.
 //
-// Only nodes whose rendered display name (without speed tags) matches at least
-// one regex are kept. Use RenderName(r, false) instead of r.Proxy["name"] so
-// filtering sees the full country + media-tag view while leaving proxy["name"]
-// unchanged.
+// Regex filters keep nodes whose rendered display name (without speed tags)
+// matches at least one regex. Use RenderName(r, false) instead of
+// r.Proxy["name"] so filtering sees the full country + media-tag view while
+// leaving proxy["name"] unchanged. CloudflareOnly additionally requires the
+// proxy endpoint server to be Cloudflare-fronted.
 func FilterResults(results []Result) []Result {
 	patterns := CompileFilterPatterns()
-	if len(patterns) == 0 {
+	if len(patterns) == 0 && !config.GlobalConfig.CloudflareOnly {
 		return results
 	}
 
-	slog.Info(fmt.Sprintf("Applying node filters: %d regexes", len(patterns)))
+	if len(patterns) > 0 {
+		slog.Info(fmt.Sprintf("Applying node filters: %d regexes", len(patterns)))
+	}
+	if config.GlobalConfig.CloudflareOnly {
+		slog.Info("Applying Cloudflare endpoint filter")
+	}
 
 	var filtered []Result
 	for _, r := range results {
