@@ -34,11 +34,28 @@ func idxFromProxyName(t *testing.T, r Result) int {
 	return idx
 }
 
-// TestPipeline_PreservesOrder pushes 200 stub proxies through the full
+func assertAllProxyNamesPresent(t *testing.T, results []Result, n int) {
+	t.Helper()
+	seen := make(map[int]bool, n)
+	for _, r := range results {
+		idx := idxFromProxyName(t, r)
+		if idx < 0 || idx >= n {
+			t.Fatalf("result idx out of range: %d", idx)
+		}
+		if seen[idx] {
+			t.Fatalf("duplicate result idx: %d", idx)
+		}
+		seen[idx] = true
+	}
+	if len(seen) != n {
+		t.Fatalf("expected %d unique results, got %d", n, len(seen))
+	}
+}
+
+// TestPipeline_CollectsAllResults pushes 200 stub proxies through the full
 // pipeline (dispatch → alive → media+filter → speed → collect) under
-// SUB_CHECK_SKIP so every node passes every stage, and checks that the
-// collector restores the original subscription order.
-func TestPipeline_PreservesOrder(t *testing.T) {
+// SUB_CHECK_SKIP so every node passes every stage.
+func TestPipeline_CollectsAllResults(t *testing.T) {
 	t.Setenv("SUB_CHECK_SKIP", "1")
 	const n = 200
 	withConfig(t, config.Config{
@@ -58,11 +75,7 @@ func TestPipeline_PreservesOrder(t *testing.T) {
 		if len(results) != n {
 			t.Fatalf("expected %d results, got %d", n, len(results))
 		}
-		for i, r := range results {
-			if got := idxFromProxyName(t, r); got != i {
-				t.Errorf("results[%d] has idx=%d, expected %d (ordering broken)", i, got, i)
-			}
-		}
+		assertAllProxyNamesPresent(t, results, n)
 	})
 }
 
@@ -115,7 +128,7 @@ func TestPipeline_HonorsSuccessLimit(t *testing.T) {
 
 // TestPipeline_NoSpeedStage verifies that when SpeedTestUrl is empty the
 // collector receives items directly from the media stage (speed workers
-// never start) and still preserves order.
+// never start).
 func TestPipeline_NoSpeedStage(t *testing.T) {
 	t.Setenv("SUB_CHECK_SKIP", "1")
 	const n = 100
@@ -134,9 +147,49 @@ func TestPipeline_NoSpeedStage(t *testing.T) {
 		if len(results) != n {
 			t.Fatalf("expected %d results, got %d", n, len(results))
 		}
-		for i, r := range results {
-			if got := idxFromProxyName(t, r); got != i {
-				t.Errorf("results[%d] has idx=%d, expected %d", i, got, i)
+		assertAllProxyNamesPresent(t, results, n)
+	})
+}
+
+func TestCheck_HonorsMaxProbesAcrossBatches(t *testing.T) {
+	t.Setenv("SUB_CHECK_SKIP", "1")
+	oldHistory := config.GlobalProxies
+	defer func() { config.GlobalProxies = oldHistory }()
+
+	const (
+		input = 12000
+		limit = 7000
+	)
+	history := makePipelineProxies(input)
+	for _, proxy := range history {
+		proxy["sub_url"] = "history"
+	}
+	config.GlobalProxies = history
+
+	withConfig(t, config.Config{
+		Concurrent:       100,
+		MediaConcurrent:  100,
+		MaxProbesPerRun:  limit,
+		Timeout:          1000,
+		PrintProgress:    false,
+		SubUrls:          nil,
+		SubUrlsRemote:    nil,
+		RenameNode:       false,
+		NodeNameTemplate: "",
+	}, func() {
+		results, err := Check()
+		if err != nil {
+			t.Fatalf("Check returned error: %v", err)
+		}
+		if len(results) != limit {
+			t.Fatalf("expected %d results, got %d", limit, len(results))
+		}
+		if len(config.GlobalProxies) != 0 {
+			t.Fatalf("expected GlobalProxies to be cleared, got %d", len(config.GlobalProxies))
+		}
+		for _, result := range results {
+			if _, ok := result.Proxy["sub_url"]; ok {
+				t.Fatal("sub_url leaked into saved result")
 			}
 		}
 	})

@@ -2,6 +2,7 @@ package check
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -147,6 +148,10 @@ func installPhaseCancel(cancel context.CancelFunc) func() {
 
 var Bucket *ratelimit.Bucket
 
+const proxyCheckBatchSize = 5000
+
+var errStopProxyBatches = errors.New("stop proxy batches")
+
 var probePacer = &globalProbePacer{}
 
 type globalProbePacer struct {
@@ -221,34 +226,102 @@ func Check() ([]Result, error) {
 
 	TotalBytes.Store(0)
 
-	// Prepend keep-days history nodes.
-	var proxies []map[string]any
-	if len(config.GlobalProxies) > 0 {
-		slog.Info(fmt.Sprintf("Added history nodes to the check queue: %d", len(config.GlobalProxies)))
-		proxies = append(proxies, config.GlobalProxies...)
-	}
-	tmp, err := proxyutils.GetProxies()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nodes: %w", err)
-	}
-	proxies = append(proxies, tmp...)
-	slog.Info(fmt.Sprintf("Fetched nodes: %d", len(proxies)))
+	seenKeys := make(map[string]bool)
+	results := make([]Result, 0)
+	subStats := make(map[string]*subscriptionStats)
+	totalFetched := 0
+	totalDeduped := 0
+	totalChecked := 0
+	limitLogged := false
 
-	// Reset global nodes.
+	runBatch := func(proxies []map[string]any) error {
+		totalFetched += len(proxies)
+		proxies = proxyutils.DeduplicateProxiesBySeen(proxies, seenKeys)
+		totalDeduped += len(proxies)
+		if len(proxies) == 0 {
+			return nil
+		}
+
+		if limit := config.GlobalConfig.MaxProbesPerRun; limit > 0 {
+			remaining := limit - totalChecked
+			if remaining <= 0 {
+				if !limitLogged {
+					slog.Warn("Probe cap enabled; limiting node checks", "limit", limit)
+					limitLogged = true
+				}
+				return errStopProxyBatches
+			}
+			if len(proxies) > remaining {
+				proxies = proxies[:remaining]
+				if !limitLogged {
+					slog.Warn("Probe cap enabled; limiting node checks", "limit", limit)
+					limitLogged = true
+				}
+			}
+		}
+		totalChecked += len(proxies)
+		countSubscriptionTotals(subStats, proxies)
+
+		oldSuccessLimit := config.GlobalConfig.SuccessLimit
+		if oldSuccessLimit > 0 {
+			remaining := oldSuccessLimit - int32(len(results))
+			if remaining <= 0 {
+				return errStopProxyBatches
+			}
+			config.GlobalConfig.SuccessLimit = remaining
+		}
+		checker := &ProxyChecker{results: make([]Result, 0)}
+		batchResults, err := checker.run(proxies)
+		config.GlobalConfig.SuccessLimit = oldSuccessLimit
+		if err != nil {
+			return err
+		}
+		countSubscriptionSuccesses(subStats, batchResults)
+		results = append(results, batchResults...)
+		if oldSuccessLimit > 0 && int32(len(results)) >= oldSuccessLimit {
+			return errStopProxyBatches
+		}
+		return nil
+	}
+
+	stopped := false
+	history := config.GlobalProxies
 	config.GlobalProxies = make([]map[string]any, 0)
-
-	proxies = proxyutils.DeduplicateProxies(proxies)
-	slog.Info(fmt.Sprintf("Nodes after deduplication: %d", len(proxies)))
-	if limit := config.GlobalConfig.MaxProbesPerRun; limit > 0 && len(proxies) > limit {
-		before := len(proxies)
-		proxies = limitProxiesForRun(proxies, limit, config.GlobalConfig.ShuffleTestOrder)
-		slog.Warn("Probe cap enabled; limiting node checks", "before", before, "after", len(proxies))
+	if len(history) > 0 {
+		slog.Info(fmt.Sprintf("Added history nodes to the check queue: %d", len(history)))
+		for start := 0; start < len(history); start += proxyCheckBatchSize {
+			end := start + proxyCheckBatchSize
+			if end > len(history) {
+				end = len(history)
+			}
+			if err := runBatch(history[start:end]); err != nil {
+				if errors.Is(err, errStopProxyBatches) {
+					stopped = true
+					break
+				}
+				return nil, err
+			}
+		}
 	}
 
-	checker := &ProxyChecker{
-		results: make([]Result, 0),
+	if !stopped {
+		if err := proxyutils.ForEachProxyBatch(proxyCheckBatchSize, runBatch); err != nil {
+			if !errors.Is(err, errStopProxyBatches) {
+				return nil, fmt.Errorf("failed to get nodes: %w", err)
+			}
+		}
 	}
-	return checker.run(proxies)
+
+	slog.Info(fmt.Sprintf("Fetched nodes: %d", totalFetched))
+	slog.Info(fmt.Sprintf("Nodes after deduplication: %d", totalDeduped))
+	if totalChecked != totalDeduped {
+		slog.Info(fmt.Sprintf("Checked nodes after caps: %d", totalChecked))
+	}
+	logSubscriptionSuccessRates(subStats)
+	slog.Info(fmt.Sprintf("Usable nodes: %d", len(results)))
+	slog.Info(fmt.Sprintf("Total traffic used by tests: %.3fGB", float64(TotalBytes.Load())/1024/1024/1024))
+
+	return results, nil
 }
 
 // run drives the 4-stage pipeline: dispatch → alive → media+filter → speed → collect.
@@ -340,17 +413,18 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		go func() { speedWg.Wait(); close(collectIn) }()
 	}
 
-	// Collector: place items in pre-allocated slots to preserve subscription order.
+	// Collector: append passing items as they arrive. Final ordering is handled
+	// by save.SortBySpeed when configured; avoiding a full input-sized result
+	// buffer keeps large checks memory bounded by batch size and pass count.
 	// The SuccessLimit hit notice is *not* logged here: emitting slog output
 	// mid-render interleaves with the progress writer and breaks cursor-up
 	// positioning. We remember whether we tripped the limit and log it after
 	// pauseProgress has parked the renderer.
-	out := make([]*Result, total)
+	collected := make([]Result, 0)
 	var finalPassed int32
 	limitHit := false
 	for item := range collectIn {
-		r := item.r
-		out[item.idx] = &r
+		collected = append(collected, item.r)
 		finalPassed++
 		if config.GlobalConfig.SuccessLimit > 0 && finalPassed >= config.GlobalConfig.SuccessLimit && !limitHit {
 			limitHit = true
@@ -381,13 +455,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		SavePhaseResult(3, SpeedOk.Load(), filterPassed)
 	}
 
-	// Flatten in subscription order, dropping empty slots.
-	pc.results = make([]Result, 0, finalPassed)
-	for _, r := range out {
-		if r != nil {
-			pc.results = append(pc.results, *r)
-		}
-	}
+	pc.results = collected
 
 	if config.GlobalConfig.PrintProgress {
 		done <- true
@@ -402,8 +470,6 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 	slog.Info(fmt.Sprintf("Usable nodes: %d", len(pc.results)))
 	slog.Info(fmt.Sprintf("Total traffic used by tests: %.3fGB", float64(TotalBytes.Load())/1024/1024/1024))
-
-	pc.checkSubscriptionSuccessRate(proxies)
 
 	return pc.results, nil
 }
@@ -818,58 +884,57 @@ func (pc *ProxyChecker) resetPhaseCounters(count int) {
 	SpeedOk.Store(0)
 }
 
-// checkSubscriptionSuccessRate checks subscription success rates and logs warnings.
-func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any) {
-	// Count total and successful nodes for each subscription.
-	subStats := make(map[string]struct {
-		total   int
-		success int
-	})
+type subscriptionStats struct {
+	total   int
+	success int
+}
 
-	// Count subscription sources for all nodes.
-	for _, proxy := range allProxies {
-		if subUrl, ok := proxy["sub_url"].(string); ok {
-			stats := subStats[subUrl]
-			stats.total++
-			subStats[subUrl] = stats
+func countSubscriptionTotals(stats map[string]*subscriptionStats, proxies []map[string]any) {
+	for _, proxy := range proxies {
+		if subURL, ok := proxy["sub_url"].(string); ok {
+			if stats[subURL] == nil {
+				stats[subURL] = &subscriptionStats{}
+			}
+			stats[subURL].total++
 		}
 	}
+}
 
-	// Count subscription sources for successful nodes.
-	for _, result := range pc.results {
-		if result.Proxy != nil {
-			if subUrl, ok := result.Proxy["sub_url"].(string); ok {
-				stats := subStats[subUrl]
-				stats.success++
-				subStats[subUrl] = stats
+func countSubscriptionSuccesses(stats map[string]*subscriptionStats, results []Result) {
+	for _, result := range results {
+		if result.Proxy == nil {
+			continue
+		}
+		if subURL, ok := result.Proxy["sub_url"].(string); ok {
+			if stats[subURL] == nil {
+				stats[subURL] = &subscriptionStats{}
 			}
-			delete(result.Proxy, "sub_url")
-			// Preserve node tags in 127.0.0.1:8199/sub/all.yaml.
-			if subTag, ok := result.Proxy["sub_tag"].(string); ok {
-				if subTag == "" {
-					delete(result.Proxy, "sub_tag")
-				}
-			}
+			stats[subURL].success++
+		}
+		delete(result.Proxy, "sub_url")
+		// Preserve node tags in 127.0.0.1:8199/sub/all.yaml.
+		if subTag, ok := result.Proxy["sub_tag"].(string); ok && subTag == "" {
+			delete(result.Proxy, "sub_tag")
 		}
 	}
+}
 
-	// Check success rates and log warnings.
-	for subUrl, stats := range subStats {
-		if stats.total > 0 {
-			successRate := float32(stats.success) / float32(stats.total)
-
-			// Warn when the success rate is below the configured threshold.
-			if successRate < config.GlobalConfig.SuccessRate {
-				slog.Warn(fmt.Sprintf("Subscription success rate is too low: %s", subUrl),
-					"total-nodes", stats.total,
-					"successful-nodes", stats.success,
-					"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
-			} else {
-				slog.Debug(fmt.Sprintf("Subscription node stats: %s", subUrl),
-					"total-nodes", stats.total,
-					"successful-nodes", stats.success,
-					"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
-			}
+func logSubscriptionSuccessRates(stats map[string]*subscriptionStats) {
+	for subURL, stat := range stats {
+		if stat.total == 0 {
+			continue
+		}
+		successRate := float32(stat.success) / float32(stat.total)
+		if successRate < config.GlobalConfig.SuccessRate {
+			slog.Warn(fmt.Sprintf("Subscription success rate is too low: %s", subURL),
+				"total-nodes", stat.total,
+				"successful-nodes", stat.success,
+				"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
+		} else {
+			slog.Debug(fmt.Sprintf("Subscription node stats: %s", subURL),
+				"total-nodes", stat.total,
+				"successful-nodes", stat.success,
+				"success-rate", fmt.Sprintf("%.2f%%", successRate*100))
 		}
 	}
 }

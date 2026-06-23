@@ -6,6 +6,10 @@ import (
 
 func DeduplicateProxies(proxies []map[string]any) []map[string]any {
 	seenKeys := make(map[string]bool)
+	return DeduplicateProxiesBySeen(proxies, seenKeys)
+}
+
+func DeduplicateProxiesBySeen(proxies []map[string]any, seenKeys map[string]bool) []map[string]any {
 	result := make([]map[string]any, 0, len(proxies))
 
 	for _, proxy := range proxies {

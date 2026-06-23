@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/http"
 	u "net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +31,27 @@ type subEntry struct {
 	source string
 }
 
+const (
+	defaultProxyBatchSize   = 5000
+	failedSubIgnoreFile     = "failed-sub-urls.yaml"
+	failedSubIgnoreDuration = 72 * time.Hour
+)
+
+var fetchSubData = GetDateFromSubs
+
 func GetProxies() ([]map[string]any, error) {
+	var proxies []map[string]any
+	err := ForEachProxyBatch(0, func(batch []map[string]any) error {
+		proxies = append(proxies, batch...)
+		return nil
+	})
+	return proxies, err
+}
+
+func ForEachProxyBatch(batchSize int, handle func([]map[string]any) error) error {
+	if batchSize <= 0 {
+		batchSize = defaultProxyBatchSize
+	}
 
 	// Resolve local and remote subscription lists.
 	subUrls, localNum, remoteNum := resolveSubUrls()
@@ -49,120 +71,297 @@ func GetProxies() ([]map[string]any, error) {
 		subFetchConcurrency = 20
 	}
 	concurrentLimit := make(chan struct{}, subFetchConcurrency) // Limit concurrency.
+	ignores := loadFailedSubIgnores(time.Now())
+	defer ignores.save()
+	var ignoreMu sync.Mutex
 
-	// Preallocate buckets in subscription order. Each goroutine writes only its
-	// own index, so there is no contention. Even with concurrent fetches, the
-	// final merge preserves subUrls order: local first, then remote.
-	buckets := make([][]map[string]any, len(subUrls))
+	var (
+		batch    = make([]map[string]any, 0, batchSize)
+		batchMu  sync.Mutex
+		handleMu sync.Mutex
+		stopOnce sync.Once
+		errMu    sync.Mutex
+		retErr   error
+		done     = make(chan struct{})
+	)
+	stop := func(err error) {
+		if err != nil {
+			errMu.Lock()
+			if retErr == nil {
+				retErr = err
+			}
+			errMu.Unlock()
+		}
+		stopOnce.Do(func() { close(done) })
+	}
+	currentErr := func() error {
+		errMu.Lock()
+		defer errMu.Unlock()
+		return retErr
+	}
+	flush := func(items []map[string]any) error {
+		if len(items) == 0 {
+			return nil
+		}
+		select {
+		case <-done:
+			return currentErr()
+		default:
+		}
+		handleMu.Lock()
+		defer handleMu.Unlock()
+		select {
+		case <-done:
+			return currentErr()
+		default:
+		}
+		err := handle(items)
+		if err != nil {
+			stop(err)
+		}
+		return err
+	}
+	addProxy := func(proxy map[string]any) error {
+		select {
+		case <-done:
+			return currentErr()
+		default:
+		}
+
+		batchMu.Lock()
+		batch = append(batch, proxy)
+		if len(batch) < batchSize {
+			batchMu.Unlock()
+			return nil
+		}
+		items := batch
+		batch = make([]map[string]any, 0, batchSize)
+		batchMu.Unlock()
+		return flush(items)
+	}
 
 	// Start workers.
+fetchLoop:
 	for idx, subUrl := range subUrls {
-		wg.Add(1)
-		concurrentLimit <- struct{}{} // Acquire token.
+		select {
+		case <-done:
+			break fetchLoop
+		default:
+		}
+		if ignores.ignored(subUrl.url, time.Now()) {
+			slog.Warn("Subscription URL is temporarily ignored after recent failure", "source", subUrl.source, "url", subUrl.url)
+			continue
+		}
 
-		go func(i int, e subEntry) {
+		wg.Add(1)
+		select {
+		case concurrentLimit <- struct{}{}: // Acquire token.
+		case <-done:
+			wg.Done()
+			break fetchLoop
+		}
+
+		go func(e subEntry) {
 			defer wg.Done()
 			defer func() { <-concurrentLimit }() // Release token.
 
-			url := e.url
-			data, err := GetDateFromSubs(url)
+			url := utils.WarpUrl(e.url)
+			data, err := fetchSubData(url)
 			if err != nil {
-				slog.Error("Failed to fetch subscription URL; skipping", "source", e.source, "url", url, "err", err)
+				slog.Error("Failed to fetch subscription URL; ignoring for 3 days", "source", e.source, "url", e.url, "err", err)
+				ignoreMu.Lock()
+				ignores.ignore(e.url, time.Now().Add(failedSubIgnoreDuration))
+				ignoreMu.Unlock()
 				return
 			}
 
-			var tag string
-			if d, err := u.Parse(url); err == nil {
-				tag = d.Fragment
-			}
-
-			var local []map[string]any
-
-			var con map[string]any
-			err = yaml.Unmarshal(data, &con)
+			count, err := forEachProxyFromSubData(url, data, addProxy)
 			if err != nil {
-				proxyList, err := convert.ConvertsV2Ray(data)
-				if err != nil {
-					slog.Error("Failed to parse proxy", "source", e.source, "url", url, "err", err)
+				if currentErr() != nil {
 					return
 				}
-				slog.Debug("Fetched subscription URL", "source", e.source, "url", url, "count", len(proxyList))
-				local = make([]map[string]any, 0, len(proxyList))
-				for _, proxy := range proxyList {
-					// Test only selected protocols.
-					if t, ok := proxy["type"].(string); ok {
-						if len(config.GlobalConfig.NodeType) > 0 && !lo.Contains(config.GlobalConfig.NodeType, t) {
-							continue
-						}
-					}
-
-					// Add subscription source information and tag to each node.
-					proxy["sub_url"] = url
-					if tag != "" {
-						proxy["sub_tag"] = tag
-					}
-					local = append(local, proxy)
-				}
-				buckets[i] = local
+				slog.Error("Failed to parse proxy", "source", e.source, "url", url, "err", err)
 				return
 			}
-
-			proxyInterface, ok := con["proxies"]
-			if !ok || proxyInterface == nil {
-				slog.Error("Subscription URL has no proxies", "source", e.source, "url", url)
-				return
-			}
-
-			proxyList, ok := proxyInterface.([]any)
-			if !ok {
-				return
-			}
-			slog.Debug("Fetched subscription URL", "source", e.source, "url", url, "count", len(proxyList))
-			local = make([]map[string]any, 0, len(proxyList))
-			for _, proxy := range proxyList {
-				if proxyMap, ok := proxy.(map[string]any); ok {
-					if t, ok := proxyMap["type"].(string); ok {
-						// Test only selected protocols.
-						if len(config.GlobalConfig.NodeType) > 0 && !lo.Contains(config.GlobalConfig.NodeType, t) {
-							continue
-						}
-						// mihomo supports underscores, but normalize to hyphens here.
-						// todo: check whether similar fields need normalization.
-						switch t {
-						case "hysteria2", "hy2":
-							if _, ok := proxyMap["obfs_password"]; ok {
-								proxyMap["obfs-password"] = proxyMap["obfs_password"]
-								delete(proxyMap, "obfs_password")
-							}
-						}
-					}
-					// Add subscription source information and tag to each node.
-					proxyMap["sub_url"] = url
-					if tag != "" {
-						proxyMap["sub_tag"] = tag
-					}
-					local = append(local, proxyMap)
-				}
-			}
-			buckets[i] = local
-		}(idx, subEntry{url: utils.WarpUrl(subUrl.url), source: subUrl.source})
+			slog.Debug("Fetched subscription URL", "source", e.source, "url", url, "count", count)
+		}(subUrls[idx])
 	}
 
 	// Wait for all workers to finish.
 	wg.Wait()
 
-	// Merge in subscription order: local subscriptions first, then remote
-	// subscriptions, preserving node order inside each subscription.
-	total := 0
-	for _, b := range buckets {
-		total += len(b)
-	}
-	mihomoProxies := make([]map[string]any, 0, total)
-	for _, b := range buckets {
-		mihomoProxies = append(mihomoProxies, b...)
+	if err := currentErr(); err != nil {
+		return err
 	}
 
-	return mihomoProxies, nil
+	batchMu.Lock()
+	items := batch
+	batch = nil
+	batchMu.Unlock()
+	if err := flush(items); err != nil {
+		return err
+	}
+
+	return currentErr()
+}
+
+func forEachProxyFromSubData(url string, data []byte, yield func(map[string]any) error) (int, error) {
+	var tag string
+	if d, err := u.Parse(url); err == nil {
+		tag = d.Fragment
+	}
+
+	var con map[string]any
+	if err := yaml.Unmarshal(data, &con); err != nil {
+		proxyList, err := convert.ConvertsV2Ray(data)
+		if err != nil {
+			return 0, err
+		}
+		count := 0
+		for _, proxy := range proxyList {
+			if !prepareProxy(proxy, url, tag) {
+				continue
+			}
+			count++
+			if err := yield(proxy); err != nil {
+				return count, err
+			}
+		}
+		return count, nil
+	}
+
+	proxyInterface, ok := con["proxies"]
+	if !ok || proxyInterface == nil {
+		return 0, errors.New("subscription has no proxies")
+	}
+	proxyList, ok := proxyInterface.([]any)
+	if !ok {
+		return 0, errors.New("subscription proxies field is invalid")
+	}
+
+	count := 0
+	for _, proxy := range proxyList {
+		proxyMap, ok := proxy.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !prepareProxy(proxyMap, url, tag) {
+			continue
+		}
+		count++
+		if err := yield(proxyMap); err != nil {
+			return count, err
+		}
+	}
+	return count, nil
+}
+
+func prepareProxy(proxy map[string]any, url, tag string) bool {
+	if t, ok := proxy["type"].(string); ok {
+		if len(config.GlobalConfig.NodeType) > 0 && !lo.Contains(config.GlobalConfig.NodeType, t) {
+			return false
+		}
+		switch t {
+		case "hysteria2", "hy2":
+			if _, ok := proxy["obfs_password"]; ok {
+				proxy["obfs-password"] = proxy["obfs_password"]
+				delete(proxy, "obfs_password")
+			}
+		}
+	}
+
+	proxy["sub_url"] = url
+	if tag != "" {
+		proxy["sub_tag"] = tag
+	}
+	return true
+}
+
+type failedSubIgnores struct {
+	path    string
+	entries map[string]time.Time
+	dirty   bool
+}
+
+func loadFailedSubIgnores(now time.Time) *failedSubIgnores {
+	ignores := &failedSubIgnores{
+		path:    failedSubIgnorePath(),
+		entries: make(map[string]time.Time),
+	}
+	data, err := os.ReadFile(ignores.path)
+	if err != nil {
+		return ignores
+	}
+
+	var raw map[string]string
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		slog.Warn("Failed to parse failed subscription ignore list; starting fresh", "path", ignores.path, "err", err)
+		ignores.dirty = true
+		return ignores
+	}
+	for url, value := range raw {
+		expires, err := time.Parse(time.RFC3339, value)
+		if err != nil || !expires.After(now) {
+			ignores.dirty = true
+			continue
+		}
+		ignores.entries[url] = expires
+	}
+	return ignores
+}
+
+func (i *failedSubIgnores) ignored(url string, now time.Time) bool {
+	expires, ok := i.entries[url]
+	if !ok {
+		return false
+	}
+	if expires.After(now) {
+		return true
+	}
+	delete(i.entries, url)
+	i.dirty = true
+	return false
+}
+
+func (i *failedSubIgnores) ignore(url string, expires time.Time) {
+	i.entries[url] = expires
+	i.dirty = true
+}
+
+func (i *failedSubIgnores) save() {
+	if !i.dirty {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(i.path), 0755); err != nil {
+		slog.Warn("Failed to create failed subscription ignore directory", "path", i.path, "err", err)
+		return
+	}
+	if len(i.entries) == 0 {
+		if err := os.Remove(i.path); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to remove empty failed subscription ignore list", "path", i.path, "err", err)
+		}
+		return
+	}
+
+	raw := make(map[string]string, len(i.entries))
+	for url, expires := range i.entries {
+		raw[url] = expires.Format(time.RFC3339)
+	}
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		slog.Warn("Failed to serialize failed subscription ignore list", "path", i.path, "err", err)
+		return
+	}
+	if err := os.WriteFile(i.path, data, 0644); err != nil {
+		slog.Warn("Failed to save failed subscription ignore list", "path", i.path, "err", err)
+	}
+}
+
+func failedSubIgnorePath() string {
+	if config.GlobalConfig.OutputDir != "" {
+		return filepath.Join(config.GlobalConfig.OutputDir, failedSubIgnoreFile)
+	}
+	return filepath.Join(utils.GetExecutablePath(), "output", failedSubIgnoreFile)
 }
 
 // from 3k
