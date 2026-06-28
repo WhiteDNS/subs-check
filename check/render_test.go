@@ -218,6 +218,23 @@ func TestRenderName_IPRiskTag(t *testing.T) {
 	})
 }
 
+func TestRenderName_DNSLeakTag(t *testing.T) {
+	withConfig(t, config.Config{
+		RenameNode: false,
+		Platforms:  []string{"dnsleak"},
+	}, func() {
+		r := Result{
+			Proxy:   map[string]any{"name": "n"},
+			DNSLeak: &platform.DNSLeakResult{NoLeak: true},
+		}
+		got := RenderName(r, false)
+		want := "n|DNSOK"
+		if got != want {
+			t.Errorf("RenderName() = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestRenderName_RenameOnWithCountry(t *testing.T) {
 	proxyutils.ResetRenameCounter()
 	withConfig(t, config.Config{

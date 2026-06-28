@@ -128,6 +128,8 @@ platforms:
   - gemini
   - claude
   - spotify
+  # Runs after speed test; drops nodes whose DNS resolver ASN differs from the exit ASN.
+  # - dnsleak
 
 # Keep usable historical nodes from the last N days.
 # When enabled, each check saves a node snapshot under output/history/.

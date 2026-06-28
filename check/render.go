@@ -162,6 +162,10 @@ func mediaTagFor(plat string, r *Result) string {
 		if r.Spotify != "" {
 			return fmt.Sprintf("SP-%s", r.Spotify)
 		}
+	case "dnsleak":
+		if r.DNSLeak != nil && r.DNSLeak.NoLeak {
+			return "DNSOK"
+		}
 	case "iprisk":
 		if r.IPRisk != "" {
 			return r.IPRisk

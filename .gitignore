@@ -11,5 +11,7 @@ mihomo-check*
 .vscode
 .claude/
 .qoder/
+.cache/
+dnsleaktest/
 
 .DS_Store

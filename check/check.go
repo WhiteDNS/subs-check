@@ -37,6 +37,7 @@ type Result struct {
 	TikTok     string
 	Claude     string
 	Spotify    string
+	DNSLeak    *platform.DNSLeakResult
 	IP         string
 	IPRisk     string
 	Country    string
@@ -712,7 +713,24 @@ func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 	}
 
 	r.Speed = speed
+	if platformConfigured("dnsleak") {
+		dnsLeak, err := platform.CheckDNSLeak(httpClient.Client)
+		if err != nil || dnsLeak == nil || !dnsLeak.NoLeak {
+			slog.Debug(fmt.Sprintf("DNS leak check failed: %v", err))
+			return nil
+		}
+		r.DNSLeak = dnsLeak
+	}
 	return &r
+}
+
+func platformConfigured(name string) bool {
+	for _, plat := range config.GlobalConfig.Platforms {
+		if plat == name {
+			return true
+		}
+	}
+	return false
 }
 
 // checkMedia runs media checks and any required country lookup.
