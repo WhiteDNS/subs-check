@@ -496,6 +496,10 @@
                                 <span class="phase-icon"><i class="bi bi-speedometer"></i></span>Speed
                                 <span class="phase-count" id="phaseCount3"></span>
                             </div>
+                            <div id="phaseStep4" class="phase-step" data-phase="4" style="display: none;">
+                                <span class="phase-icon"><i class="bi bi-shield-check"></i></span>DNS Leak
+                                <span class="phase-count" id="phaseCount4"></span>
+                            </div>
                         </div>
                         <div class="progress-info">
                             <div>Progress: <span id="progressText">N/A</span></div>
@@ -561,7 +565,8 @@
         const PHASE_LABELS = {
             1: { name: 'Alive', countLabel: 'Alive' },
             2: { name: 'Media + Rename', countLabel: 'Done' },
-            3: { name: 'Speed', countLabel: 'Passed' }
+            3: { name: 'Speed', countLabel: 'Passed' },
+            4: { name: 'DNS Leak', countLabel: 'Passed' }
         };
 
         // Cache frequently accessed DOM elements.
@@ -878,13 +883,13 @@
         });
 
         // Cache phase-step DOM elements.
-        const phaseStepEls = [null, document.getElementById('phaseStep1'), document.getElementById('phaseStep2'), document.getElementById('phaseStep3')];
-        const phaseCountEls = [null, document.getElementById('phaseCount1'), document.getElementById('phaseCount2'), document.getElementById('phaseCount3')];
+        const phaseStepEls = [null, document.getElementById('phaseStep1'), document.getElementById('phaseStep2'), document.getElementById('phaseStep3'), document.getElementById('phaseStep4')];
+        const phaseCountEls = [null, document.getElementById('phaseCount1'), document.getElementById('phaseCount2'), document.getElementById('phaseCount3'), document.getElementById('phaseCount4')];
 
         // Update phase-step indicator.
         function updatePhaseSteps(phase, available, total, phaseResults) {
             // Check whether any phase result exists.
-            const hasResults = phaseResults && (phaseResults['1'] || phaseResults['2'] || phaseResults['3']);
+            const hasResults = phaseResults && (phaseResults['1'] || phaseResults['2'] || phaseResults['3'] || phaseResults['4']);
 
             if (phase === 0 && !hasResults) {
                 dom.phaseSteps.style.display = 'none';
@@ -893,12 +898,18 @@
 
             dom.phaseSteps.style.display = 'flex';
 
-            for (let i = 1; i <= 3; i++) {
+            for (let i = 1; i <= 4; i++) {
                 const step = phaseStepEls[i];
                 const count = phaseCountEls[i];
                 const label = PHASE_LABELS[i] ? PHASE_LABELS[i].countLabel : '';
                 const result = phaseResults ? phaseResults[String(i)] : null;
 
+                if (i === 4 && !result && phase !== 4) {
+                    step.style.display = 'none';
+                    count.textContent = '';
+                    continue;
+                }
+                step.style.display = '';
                 step.classList.remove('active', 'done');
 
                 if (i < phase) {
@@ -968,16 +979,23 @@
         // When speed testing is off, the speed row stays visible but inactive with an
         // empty counter — matching the legacy "grayed, no data" look rather than
         // hiding the row outright (which shifted the layout).
-        function updatePipelineSteps(p, hasSpeed) {
+        function updatePipelineSteps(p, hasSpeed, hasDNSLeak) {
             dom.phaseSteps.style.display = 'flex';
             const rows = [
                 { idx: 1, label: 'Alive', pass: p.alivePass,  total: p.total, active: true },
                 { idx: 2, label: 'Passed', pass: p.filterPass, total: p.alivePass, active: true },
                 { idx: 3, label: 'Passed', pass: p.speedPass, total: p.filterPass, active: hasSpeed },
+                { idx: 4, label: 'Passed', pass: p.dnsPass, total: p.speedPass, active: hasDNSLeak },
             ];
             for (const r of rows) {
                 const step = phaseStepEls[r.idx];
                 const count = phaseCountEls[r.idx];
+                if (r.idx === 4 && !hasDNSLeak) {
+                    step.style.display = 'none';
+                    count.textContent = '';
+                    continue;
+                }
+                step.style.display = '';
                 step.classList.remove('active', 'done');
                 if (r.active) {
                     step.classList.add('active');
@@ -988,10 +1006,10 @@
             }
         }
 
-        function updatePipelineBar(p, hasSpeed) {
+        function updatePipelineBar(p, hasSpeed, hasDNSLeak) {
             const total = p.total;
             const processed = p.aliveDone;                         // how far through input
-            const success = hasSpeed ? p.speedPass : p.filterPass; // end-to-end pass count
+            const success = hasDNSLeak ? p.dnsPass : (hasSpeed ? p.speedPass : p.filterPass); // end-to-end pass count
 
             const pctProcessed = total > 0 ? (processed / total * 100).toFixed(1) : 0;
             dom.progressText.textContent = processed + '/' + total;
@@ -1026,8 +1044,8 @@
                         dom.statusText.textContent = 'Checking...';
 
                         if (data.pipeline) {
-                            updatePipelineBar(data.pipeline, !!data.hasSpeedTest);
-                            updatePipelineSteps(data.pipeline, !!data.hasSpeedTest);
+                            updatePipelineBar(data.pipeline, !!data.hasSpeedTest, !!data.hasDNSLeakTest);
+                            updatePipelineSteps(data.pipeline, !!data.hasSpeedTest, !!data.hasDNSLeakTest);
                         } else {
                             // legacy fallback (older server)
                             updateProgressBar(data.proxyCount, data.progress, data.available, data.phase, data.phaseResults);

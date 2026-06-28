@@ -74,7 +74,9 @@ var (
 	MediaDone    atomic.Uint32 // checkMedia completions (pass-through, never drops)
 	FilterPassed atomic.Uint32 // items that matched the filter and entered speed/collector
 	SpeedDone    atomic.Uint32 // checkSpeed completions (pass + fail)
-	SpeedOk      atomic.Uint32 // checkSpeed passes (also equals collector input when hasSpeedTest)
+	SpeedOk      atomic.Uint32 // raw checkSpeed passes
+	DNSLeakDone  atomic.Uint32 // DNS leak check completions (pass + fail)
+	DNSLeakOk    atomic.Uint32 // DNS leak check passes
 )
 
 // PhaseResult stores the final result for one stage.
@@ -84,23 +86,23 @@ type PhaseResult struct {
 }
 
 // PhaseResults stores final results for each stage for the frontend history view.
-var PhaseResults [4]atomic.Pointer[PhaseResult] // indexes 1-3 map to the three stages.
+var PhaseResults [5]atomic.Pointer[PhaseResult] // indexes 1-4 map to pipeline stages.
 
 func SavePhaseResult(phase int, available, total uint32) {
-	if phase >= 1 && phase <= 3 {
+	if phase >= 1 && phase <= 4 {
 		PhaseResults[phase].Store(&PhaseResult{Available: available, Total: total})
 	}
 }
 
 func GetPhaseResult(phase int) *PhaseResult {
-	if phase >= 1 && phase <= 3 {
+	if phase >= 1 && phase <= 4 {
 		return PhaseResults[phase].Load()
 	}
 	return nil
 }
 
 func ResetPhaseResults() {
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 4; i++ {
 		PhaseResults[i].Store(nil)
 	}
 }
@@ -354,6 +356,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	// request to fail (no host) and silently drop nearly all results.
 	speedTestURL := config.GlobalConfig.SpeedTestUrl
 	hasSpeedTest := speedTestURL != ""
+	hasDNSLeakTest := hasSpeedTest && platformConfigured("dnsleak")
 	total := len(proxies)
 
 	aliveConcurrency := effectiveConcurrency(config.GlobalConfig.Concurrent, config.GlobalConfig.Concurrent, total)
@@ -410,7 +413,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 
 	// Speed workers (optional)
 	if hasSpeedTest {
-		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn, speedTestURL)
+		speedWg := pc.startSpeedWorkers(ctx, speedConcurrency, speedIn, collectIn, speedTestURL, hasDNSLeakTest)
 		go func() { speedWg.Wait(); close(collectIn) }()
 	}
 
@@ -446,7 +449,8 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	}
 
 	// Snapshot per-stage results. Totals cascade: alive counts against input,
-	// media counts against alive, speed counts against filter-passed.
+	// media counts against alive, speed counts against filter-passed, and
+	// DNS leak counts against raw speed passes when enabled.
 	aliveOk := Available.Load()
 	mediaDone := MediaDone.Load()
 	filterPassed := FilterPassed.Load()
@@ -454,6 +458,9 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 	SavePhaseResult(2, mediaDone, aliveOk)
 	if hasSpeedTest {
 		SavePhaseResult(3, SpeedOk.Load(), filterPassed)
+		if hasDNSLeakTest {
+			SavePhaseResult(4, DNSLeakOk.Load(), SpeedOk.Load())
+		}
 	}
 
 	pc.results = collected
@@ -637,16 +644,16 @@ func (pc *ProxyChecker) startMediaWorkers(
 }
 
 // startSpeedWorkers spawns n speed-test workers.
-// Last stage before the collector: items that pass min-speed are sent
-// unconditionally so an item classified as "good" is never dropped at
-// the final hop, even if cancel fires between SpeedOk.Add and the send.
+// Items that pass every enabled post-media gate are sent unconditionally so
+// an item classified as "good" is never dropped at the final hop, even if
+// cancel fires between the final pass counter and the send.
 // ctx.Err is only checked at the top of the loop to avoid starting a
 // fresh ~10s speed test once we've already tripped SuccessLimit.
 //
 // speedTestURL is passed through (captured at pipeline start) so the
 // run stays self-consistent even if the user edits SpeedTestUrl in
 // the config file mid-check.
-func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem, speedTestURL string) *sync.WaitGroup {
+func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan pipelineItem, out chan<- pipelineItem, speedTestURL string, hasDNSLeakTest bool) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -662,6 +669,14 @@ func (pc *ProxyChecker) startSpeedWorkers(ctx context.Context, n int, in <-chan 
 					continue
 				}
 				SpeedOk.Add(1)
+				if hasDNSLeakTest {
+					updated = pc.checkDNSLeak(*updated)
+					DNSLeakDone.Add(1)
+					if updated == nil {
+						continue
+					}
+					DNSLeakOk.Add(1)
+				}
 				out <- pipelineItem{idx: item.idx, r: *updated}
 			}
 		}()
@@ -713,14 +728,27 @@ func (pc *ProxyChecker) checkSpeed(r Result, speedTestURL string) *Result {
 	}
 
 	r.Speed = speed
-	if platformConfigured("dnsleak") {
-		dnsLeak, err := platform.CheckDNSLeak(httpClient.Client)
-		if err != nil || dnsLeak == nil || !dnsLeak.NoLeak {
-			slog.Debug(fmt.Sprintf("DNS leak check failed: %v", err))
-			return nil
-		}
-		r.DNSLeak = dnsLeak
+	return &r
+}
+
+func (pc *ProxyChecker) checkDNSLeak(r Result) *Result {
+	if os.Getenv("SUB_CHECK_SKIP") != "" {
+		r.DNSLeak = &platform.DNSLeakResult{NoLeak: true}
+		return &r
 	}
+
+	httpClient := CreateClient(r.Proxy)
+	if httpClient == nil {
+		return nil
+	}
+	defer httpClient.Close()
+
+	dnsLeak, err := platform.CheckDNSLeak(httpClient.Client)
+	if err != nil || dnsLeak == nil || !dnsLeak.NoLeak {
+		slog.Debug(fmt.Sprintf("DNS leak check failed: %v", err))
+		return nil
+	}
+	r.DNSLeak = dnsLeak
 	return &r
 }
 
@@ -900,6 +928,8 @@ func (pc *ProxyChecker) resetPhaseCounters(count int) {
 	FilterPassed.Store(0)
 	SpeedDone.Store(0)
 	SpeedOk.Store(0)
+	DNSLeakDone.Store(0)
+	DNSLeakOk.Store(0)
 }
 
 type subscriptionStats struct {

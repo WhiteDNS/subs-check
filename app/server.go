@@ -308,8 +308,8 @@ func (app *App) updateConfig(c *gin.Context) {
 
 // getStatus returns application status.
 func (app *App) getStatus(c *gin.Context) {
-	phaseResults := make(map[string]*check.PhaseResult, 3)
-	for i := 1; i <= 3; i++ {
+	phaseResults := make(map[string]*check.PhaseResult, 4)
+	for i := 1; i <= 4; i++ {
 		phaseResults[fmt.Sprintf("%d", i)] = check.GetPhaseResult(i)
 	}
 	// Pipeline stages run concurrently, so a single `phase` value is no
@@ -324,17 +324,29 @@ func (app *App) getStatus(c *gin.Context) {
 		"filterPass": check.FilterPassed.Load(),
 		"speedDone":  check.SpeedDone.Load(),
 		"speedPass":  check.SpeedOk.Load(),
+		"dnsDone":    check.DNSLeakDone.Load(),
+		"dnsPass":    check.DNSLeakOk.Load(),
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"checking":     app.checking.Load(),
-		"proxyCount":   check.ProxyCount.Load(),
-		"available":    check.Available.Load(),
-		"progress":     check.Progress.Load(),
-		"phase":        check.Phase.Load(),
-		"phaseResults": phaseResults,
-		"pipeline":     pipeline,
-		"hasSpeedTest": config.GlobalConfig.SpeedTestUrl != "",
+		"checking":       app.checking.Load(),
+		"proxyCount":     check.ProxyCount.Load(),
+		"available":      check.Available.Load(),
+		"progress":       check.Progress.Load(),
+		"phase":          check.Phase.Load(),
+		"phaseResults":   phaseResults,
+		"pipeline":       pipeline,
+		"hasSpeedTest":   config.GlobalConfig.SpeedTestUrl != "",
+		"hasDNSLeakTest": config.GlobalConfig.SpeedTestUrl != "" && platformConfigured("dnsleak"),
 	})
+}
+
+func platformConfigured(name string) bool {
+	for _, plat := range config.GlobalConfig.Platforms {
+		if plat == name {
+			return true
+		}
+	}
+	return false
 }
 
 // triggerCheckHandler manually triggers a check.
