@@ -597,35 +597,25 @@ rule-providers:
     interval: 86400
     path: ./ruleset/BanEasyPrivacy.yaml
 
-proxy-providers:
-
-  proxylist1:
-    type: http
-    url: >-
-      https://url.v1.mk/sub?&url=https%3A%2F%2Fraw.githubusercontent.com%2F10ium%2Fmulti-proxy-config-fetcher%2Frefs%2Fheads%2Fmain%2Fconfigs%2Fsingbox_configs.json&target=clash&config=https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2FSleepyHeeead%2Fsubconverter-config%40master%2Fremote-config%2Funiversal%2Furltest.ini&remove_emoji=false&add_emoji=true&append_type=true&append_info=true&scv=true&udp=true&list=true&sort=false&fdn=true&insert=false
-    interval: 7200
-    include-all: true
-    path: ./proxylist1.yaml
-
 proxies:
-- name: "dns-out"
-  type: dns
-- name: "UDP_IPv4_DIRECT"
-  type: direct
-  udp: true
-  ip-version: ipv4
-- name: "UDP_IPv6_DIRECT"
-  type: direct
-  udp: true
-  ip-version: ipv6
-- name: "TCP_IPv4_DIRECT"
-  type: direct
-  udp: false
-  ip-version: ipv4
-- name: "TCP_IPv6_DIRECT"
-  type: direct
-  udp: false
-  ip-version: ipv6
+  - name: "dns-out"
+    type: dns
+  - name: "UDP_IPv4_DIRECT"
+    type: direct
+    udp: true
+    ip-version: ipv4
+  - name: "UDP_IPv6_DIRECT"
+    type: direct
+    udp: true
+    ip-version: ipv6
+  - name: "TCP_IPv4_DIRECT"
+    type: direct
+    udp: false
+    ip-version: ipv4
+  - name: "TCP_IPv6_DIRECT"
+    type: direct
+    udp: false
+    ip-version: ipv6
 
 proxy-groups:
   - name: 🚀 Proxy Select
@@ -635,7 +625,7 @@ proxy-groups:
       - 🇭🇰HongKong
       - 🇯🇵Japan
       - 🇺🇸USA
-      - 🇨🇳Taiwan
+      - 🇹🇼Taiwan
       - 🇸🇬Singapore
       - 🇰🇷Korea
       - 🇩🇪Germany
@@ -687,8 +677,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
 
   - name: 🟦 WhiteDNS
     type: select
@@ -762,8 +751,7 @@ proxy-groups:
   - name: 🦽Manual
     type: select
     icon: https://www.svgrepo.com/show/489275/web-select.svg
-    use:
-      - proxylist1
+    include-all: true
 
   - name: 🏁Countries
     type: select
@@ -773,7 +761,7 @@ proxy-groups:
       - 🇭🇰HongKong
       - 🇯🇵Japan
       - 🇺🇸USA
-      - 🇨🇳Taiwan
+      - 🇹🇼Taiwan
       - 🇸🇬Singapore
       - 🇰🇷Korea
       - 🇩🇪Germany
@@ -822,8 +810,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇭🇰|港|HK|hk|HongKong|hongkong"
 
   - name: 🇯🇵Japan
@@ -832,8 +819,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇯🇵|日本|东京|大阪|JP|Japan"
 
   - name: 🇺🇸USA
@@ -842,18 +828,16 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇺🇸|美|US|USA|UnitedStates|洛杉矶|圣何塞|西雅图|芝加哥|达拉斯|凤凰城|硅谷|Portland|Seattle|Chicago|Dallas"
 
-  - name: 🇨🇳Taiwan
+  - name: 🇹🇼Taiwan
     type: url-test
     url: https://www.facebook.com
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇹🇼|TW|Taiwan|台|台北"
 
   - name: 🇸🇬Singapore
@@ -862,8 +846,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇸🇬|SG|Singapore|新加坡|狮城"
 
   - name: 🇰🇷Korea
@@ -872,8 +855,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇰🇷|KR|Korea|韩国|首尔|Seoul"
 
   - name: 🇩🇪Germany
@@ -882,8 +864,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇩🇪|DE|Germany|德国|法兰克福|慕尼黑|柏林|Frankfurt|Berlin|Munich"
 
   - name: 🇬🇧UK
@@ -892,8 +873,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇬🇧|GB|UK|England|英国|伦敦|London"
 
   - name: 🇫🇷France
@@ -902,8 +882,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇫🇷|FR|France|法国|巴黎|Marseille|Lyon"
 
   - name: 🇳🇱Netherlands
@@ -912,8 +891,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇳🇱|NL|Netherlands|荷兰|阿姆斯特丹|Amsterdam"
 
   - name: 🇮🇳India
@@ -922,8 +900,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇮🇳|IN|India|印度|孟买|Mumbai|Delhi|班加罗尔|Bangalore"
 
   - name: 🇨🇦Canada
@@ -932,8 +909,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇨🇦|CA|Canada|加拿大|Toronto|温哥华|Vancouver|Montreal"
 
   - name: 🇷🇺Russia
@@ -942,8 +918,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇷🇺|RU|Russia|俄罗斯|莫斯科|Moscow|圣彼得堡|StPetersburg"
 
   - name: 🇦🇺Australia
@@ -952,8 +927,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇦🇺|AU|Australia|澳大利亚|悉尼|墨尔本|Sydney|Melbourne"
 
   - name: 🇲🇾Malaysia
@@ -962,8 +936,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇲🇾|MY|Malaysia|马来西亚|吉隆坡|KualaLumpur"
 
   - name: 🇹🇭Thailand
@@ -972,8 +945,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇹🇭|TH|Thailand|泰国|曼谷|Bangkok"
 
   - name: 🇵🇭Philippines
@@ -982,8 +954,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇵🇭|PH|Philippines|菲律宾|马尼拉|Manila"
 
   - name: 🇻🇳Vietnam
@@ -992,8 +963,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇻🇳|VN|Vietnam|越南|胡志明|Hanoi|HoChiMinh"
 
   - name: 🇹🇷Turkey
@@ -1002,8 +972,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇹🇷|TR|Turkey|土耳其|伊斯坦布尔|Istanbul|Ankara"
 
   - name: 🇧🇷Brazil
@@ -1012,8 +981,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇧🇷|BR|Brazil|巴西|圣保罗|SaoPaulo|Rio"
 
   - name: 🇸🇦SaudiArabia
@@ -1022,8 +990,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇸🇦|SA|Saudi|阿拉伯|利雅得|Riyadh|Jeddah"
 
   - name: 🇿🇦SouthAfrica
@@ -1032,8 +999,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇿🇦|ZA|SouthAfrica|南非|约翰内斯堡|开普敦|CapeTown"
 
   - name: 🇦🇪UAE
@@ -1042,8 +1008,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇦🇪|AE|UAE|阿联酋|迪拜|Dubai|AbuDhabi"
 
   - name: 🇲🇽Mexico
@@ -1052,8 +1017,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇲🇽|MX|Mexico|墨西哥|墨西哥城|CDMX"
 
   - name: 🇱🇹Lithuania
@@ -1062,8 +1026,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇱🇹|LT|Lithuania|立陶宛|Vilnius"
 
   - name: 🇲🇩Moldova
@@ -1072,8 +1035,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇲🇩|MD|Moldova|摩尔多瓦|Chisinau"
 
   - name: 🇵🇱Poland
@@ -1082,8 +1044,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇵🇱|PL|Poland|波兰|华沙|Warsaw"
 
   - name: 🇸🇪Sweden
@@ -1092,8 +1053,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇸🇪|SE|Sweden|瑞典|斯德哥尔摩|Stockholm"
 
   - name: 🇮🇷Iran
@@ -1102,8 +1062,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇮🇷|IR|Iran|ایران|Tehran|تهران"
 
   - name: 🇪🇸Spain
@@ -1112,8 +1071,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇪🇸|ES|Spain|西班牙|马德里|Madrid|巴塞罗那|Barcelona"
 
   - name: 🇨🇳China
@@ -1122,8 +1080,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇨🇳|CN|China|中国|大陆|上海|北京|广州|深圳"
 
   - name: 🇮🇸Iceland
@@ -1132,8 +1089,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇮🇸|IS|Iceland"
 
   - name: 🇩🇰Denmark
@@ -1142,8 +1098,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇩🇰|DK|Denmark"
 
   - name: 🇺🇦Ukraine
@@ -1152,8 +1107,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇺🇦|UA|Ukraine"
 
   - name: 🏳️‍🌈RELAY
@@ -1162,8 +1116,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "RELAY"
 
   - name: 🇨🇭Switzerland
@@ -1172,8 +1125,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇨🇭|CH|Switzerland|瑞士|苏黎世|Zurich|Geneva"
 
   - name: 🇳🇴Norway
@@ -1182,8 +1134,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇳🇴|NO|Norway|挪威|奥斯陆|Oslo"
 
   - name: 🇫🇮Finland
@@ -1192,8 +1143,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇫🇮|FI|Finland|芬兰|赫尔辛基|Helsinki"
 
   - name: 🇧🇪Belgium
@@ -1202,8 +1152,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇧🇪|BE|Belgium|比利时|布鲁塞尔|Brussels"
 
   - name: 🇵🇹Portugal
@@ -1212,8 +1161,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇵🇹|PT|Portugal|葡萄牙|里斯本|Lisbon|Porto"
 
   - name: 🇮🇹Italy
@@ -1222,8 +1170,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇮🇹|IT|Italy|意大利|米兰|罗马|Milan|Rome"
 
   - name: 🇨🇱Chile
@@ -1232,8 +1179,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇨🇱|CL|Chile|智利|圣地亚哥|Santiago"
 
   - name: 🇦🇷Argentina
@@ -1242,8 +1188,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇦🇷|AR|Argentina|阿根廷|布宜诺斯艾利斯|BuenosAires"
 
   - name: 🇳🇿NewZealand
@@ -1252,8 +1197,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
     filter: "🇳🇿|NZ|NewZealand|新西兰|奥克兰|Auckland|Wellington"
 
   - name: 🇮🇩Indonesia
@@ -1262,8 +1206,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-        - proxylist1
+    include-all: true
     filter: "🇮🇩|ID|Indonesia"
 
   - name: 🌍Others
@@ -1272,9 +1215,8 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
-    filter: "^(?!.*(US|🇺🇸|GB|🇬🇧|JP|🇯🇵|HK|🇭🇰|TW|🇹🇼|SG|🇸🇬|KR|🇰🇷|DE|🇩🇪|FR|🇫🇷|NL|🇳🇱|IN|🇮🇳|CA|🇨🇦|RU|🇷🇺|AU|🇦🇺|MY|🇲🇾|TH|🇹🇭|PH|🇵🇭|VN|🇻🇳|TR|🇹🇷|BR|🇧🇷|SA|🇸🇦|ZA|🇿🇦|AE|🇦🇪|MX|🇲🇽|LT|🇱🇹|MD|🇲🇩|PL|🇵🇱|SE|🇸🇪|IR|🇮🇷|ES|🇪🇸|CN|🇨🇳|IS|🇮🇸|DK|🇩🇰|UA|🇺🇦|RELAY🇨🇭|CH|🇳🇴|NO|🇫🇮|FI|🇧🇪|BE|🇵🇹|PT|🇮🇹|IT|🇨🇱|CL|🇦🇷|AR|🇳🇿|NZ|🇮🇩|ID)).*"
+    include-all: true
+    filter: "^(?!.*(US|🇺🇸|GB|🇬🇧|JP|🇯🇵|HK|🇭🇰|TW|🇹🇼|SG|🇸🇬|KR|🇰🇷|DE|🇩🇪|FR|🇫🇷|NL|🇳🇱|IN|🇮🇳|CA|🇨🇦|RU|🇷🇺|AU|🇦🇺|MY|🇲🇾|TH|🇹🇭|PH|🇵🇭|VN|🇻🇳|TR|🇹🇷|BR|🇧🇷|SA|🇸🇦|ZA|🇿🇦|AE|🇦🇪|MX|🇲🇽|LT|🇱🇹|MD|🇲🇩|PL|🇵🇱|SE|🇸🇪|IR|🇮🇷|ES|🇪🇸|CN|🇨🇳|IS|🇮🇸|DK|🇩🇰|UA|🇺🇦|RELAY|🇨🇭|CH|🇳🇴|NO|🇫🇮|FI|🇧🇪|BE|🇵🇹|PT|🇮🇹|IT|🇨🇱|CL|🇦🇷|AR|🇳🇿|NZ|🇮🇩|ID)).*"
 
   - name: ⤵️FirstPing
     type: fallback
@@ -1283,8 +1225,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
 
   - name: 🔃round-robin
     type: load-balance
@@ -1294,8 +1235,7 @@ proxy-groups:
     interval: 7200
     tolerance: 300
     lazy: false
-    use:
-      - proxylist1
+    include-all: true
 
 rules:
   # =========================
