@@ -1,105 +1,3 @@
-# Generated for WhiteDNS Android app compatibility.
-# Keeps provider nodes out of this template; Sub-Store supplies live proxies when generating mihomo.yaml.
-# Adds a top-level Proxy Select group so clients can select Auto/country groups directly.
-
-global-client-fingerprint: chrome
-
-# Local API / ports
-mixed-port: 7893
-allow-lan: false
-bind-address: "127.0.0.1"
-
-# Performance
-tcp-concurrent: true
-unified-delay: true
-disable-keep-alive: false
-keep-alive-idle: 30
-keep-alive-interval: 30
-
-# Process rules
-enable-process: true
-find-process-mode: off
-
-# IP / Geo
-ipv6: false
-geo-auto-update: true
-geo-update-interval: 168
-
-# Logging / security
-log-level: warning
-secret: ""
-
-profile:
-  name: WhiteDNS
-  version: 1
-  author: WhiteDNS
-  store-selected: true
-  store-fake-ip: true
-
-dns:
-  enable: true
-  ipv6: false
-  respect-rules: true
-  prefer-h3: true
-  cache-algorithm: arc
-  use-system-hosts: true
-  use-host: true
-  enhanced-mode: fake-ip
-  fake-ip-filter-mode: blacklist
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
-    - "*.lan"
-    - "*.localdomain"
-    - "*.invalid"
-    - "*.localhost"
-    - "*.test"
-    - "*.local"
-    - "*.home.arpa"
-    - time.*.com
-    - ntp.*.com
-    - "*.ir"
-
-  default-nameserver:
-    - 1.1.1.1
-    - 8.8.8.8
-
-  nameserver:
-    - https://cloudflare-dns.com/dns-query
-    - tls://one.one.one.one
-    - 1.1.1.1
-    - 1.0.0.1
-
-  direct-nameserver:
-    - 1.1.1.1
-    - 8.8.8.8
-
-  proxy-server-nameserver:
-    - 1.1.1.1
-    - 8.8.8.8
-    - https://cloudflare-dns.com/dns-query
-    - tls://one.one.one.one
-
-sniffer:
-  enable: true
-  force-dns-mapping: true
-  parse-pure-ip: true
-  override-destination: false
-  sniff:
-    HTTP:
-      ports: [80, 8080, 8880, 2052, 2082, 2086, 2095]
-    TLS:
-      ports: [443, 8443, 2053, 2083, 2087, 2096]
-
-tun:
-  enable: true
-  stack: mixed
-  auto-route: true
-  auto-detect-interface: true
-  auto-redir: true
-  dns-hijack:
-    - any:53
-    - tcp://any:53
-
 rule-providers:
   category_public_tracker:
     type: http
@@ -597,26 +495,6 @@ rule-providers:
     interval: 86400
     path: ./ruleset/BanEasyPrivacy.yaml
 
-proxies:
-  - name: "dns-out"
-    type: dns
-  - name: "UDP_IPv4_DIRECT"
-    type: direct
-    udp: true
-    ip-version: ipv4
-  - name: "UDP_IPv6_DIRECT"
-    type: direct
-    udp: true
-    ip-version: ipv6
-  - name: "TCP_IPv4_DIRECT"
-    type: direct
-    udp: false
-    ip-version: ipv4
-  - name: "TCP_IPv6_DIRECT"
-    type: direct
-    udp: false
-    ip-version: ipv6
-
 proxy-groups:
   - name: 🚀 Proxy Select
     type: select
@@ -725,10 +603,6 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-      - UDP_IPv4_DIRECT
-      - TCP_IPv4_DIRECT
-      - UDP_IPv6_DIRECT
-      - TCP_IPv6_DIRECT
 
   - name: ⛔ WhiteDNS Block
     type: select

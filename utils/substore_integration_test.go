@@ -17,11 +17,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -352,6 +354,55 @@ func TestSubStoreLegacyFileMigration(t *testing.T) {
 	}
 	if got, want := markerContent(proc), WarpUrl("http://127.0.0.1:9/new.yaml"); got != want {
 		t.Errorf("content should be updated to %q, got %q", want, got)
+	}
+}
+
+func TestSubStoreMihomoProfileKeepsGeneratedProxies(t *testing.T) {
+	base := startTempSubStore(t)
+	BaseURL = base
+	config.GlobalConfig.GithubProxy = ""
+
+	override, err := os.ReadFile(filepath.Join(assetsDir(), "ACL4SSR_Online_Full.yaml"))
+	if err != nil {
+		t.Fatalf("read override: %v", err)
+	}
+	overrideServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(override)
+	}))
+	t.Cleanup(overrideServer.Close)
+	config.GlobalConfig.MihomoOverwriteUrl = overrideServer.URL
+
+	if err := createSub([]byte(`proxies:
+  - name: source-node
+    type: ss
+    server: example.com
+    port: 443
+    cipher: aes-128-gcm
+    password: pass
+`)); err != nil {
+		t.Fatalf("createSub: %v", err)
+	}
+	if err := createfile(); err != nil {
+		t.Fatalf("createfile: %v", err)
+	}
+
+	resp, err := http.Get(base + "/api/file/" + MihomoName)
+	if err != nil {
+		t.Fatalf("produce mihomo: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("produce mihomo status=%d body=%s", resp.StatusCode, body)
+	}
+	got := string(body)
+	for _, want := range []string{"source-node", "server: example.com"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("generated mihomo missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "UDP_IPv4_DIRECT") {
+		t.Fatalf("generated mihomo should not contain template helper proxies:\n%s", got)
 	}
 }
 
